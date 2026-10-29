@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
-from .http import HttpClient
+from .dnsutil import DnsClient
+from .http import BROWSER_USER_AGENT, USER_AGENT, HttpClient
 from .models import Confidence, Finding, Pivot, Selector, Status, utc_now
 from .modules import Module, RunContext, all_modules, get_module
 
@@ -27,6 +28,8 @@ class RunConfig:
     pivot: int = 0
     include_nsfw: bool = True
     obey_robots: bool = False
+    browser_ua: bool = False
+    dns_servers: list[str] | None = None
     cache_dir: Path | None = None
     options: dict[str, Any] = field(default_factory=dict)
 
@@ -134,12 +137,18 @@ class Runner:
         progress: Callable[[str], None] | None = None,
     ) -> None:
         self.config = config
-        self.http = http or HttpClient(timeout=config.timeout, rate=config.rate, obey_robots=config.obey_robots)
+        self.http = http or HttpClient(
+            timeout=config.timeout,
+            rate=config.rate,
+            obey_robots=config.obey_robots,
+            user_agent=BROWSER_USER_AGENT if config.browser_ua else USER_AGENT,
+        )
         self.progress = progress or (lambda msg: log.info(msg))
         self.module_names = parse_module_spec(config.modules)
         self.ctx = RunContext(
             http=self.http,
             out_dir=config.out_dir,
+            dns=DnsClient(timeout=min(config.timeout, 5.0), nameservers=config.dns_servers),
             timeout=config.timeout,
             include_nsfw=config.include_nsfw,
             cache_dir=config.cache_dir,

@@ -13,6 +13,8 @@ import httpx
 from . import __version__
 
 USER_AGENT = f"selector-recon/{__version__} (+https://github.com/landmark2436/osint_tools_claude)"
+# Opt-in via --browser-ua: one fixed, current desktop browser string. Never rotated or randomized.
+BROWSER_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0"
 MAX_BODY_CHARS = 2_000_000
 
 # Markers of bot challenges, CAPTCHAs and WAF block pages. Matched case-insensitively.
@@ -60,13 +62,15 @@ class HttpClient:
         timeout: float = 10.0,
         rate: float = 1.0,
         obey_robots: bool = False,
+        user_agent: str = USER_AGENT,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
         self.timeout = timeout
+        self.user_agent = user_agent
         self.min_interval = 1.0 / rate if rate > 0 else 0.0
         self.obey_robots = obey_robots
         self._client = httpx.Client(
-            headers={"User-Agent": USER_AGENT, "Accept-Language": "en"},
+            headers={"User-Agent": user_agent, "Accept-Language": "en"},
             timeout=timeout,
             follow_redirects=True,
             transport=transport,
@@ -76,7 +80,12 @@ class HttpClient:
         self._host_locks: dict[str, threading.Lock] = {}
         self._host_last: dict[str, float] = {}
         self._robots: dict[str, RobotFileParser | None] = {}
+        self._host_interval: dict[str, float] = {}
         self.request_count = 0
+
+    def set_host_interval(self, host: str, seconds: float) -> None:
+        """Require at least `seconds` between requests to host (for APIs with stricter limits)."""
+        self._host_interval[host.lower()] = max(seconds, self.min_interval)
 
     def close(self) -> None:
         self._client.close()
@@ -93,7 +102,8 @@ class HttpClient:
 
     def _throttle(self, host: str) -> None:
         """Wait until this host may receive the next request. Caller holds the host lock."""
-        wait = self._host_last.get(host, 0.0) + self.min_interval - time.monotonic()
+        interval = self._host_interval.get(host, self.min_interval)
+        wait = self._host_last.get(host, 0.0) + interval - time.monotonic()
         if wait > 0:
             time.sleep(wait)
         self._host_last[host] = time.monotonic()
@@ -107,6 +117,7 @@ class HttpClient:
         data: str | None = None,
         follow_redirects: bool = True,
         check_robots: bool | None = None,
+        timeout: float | None = None,
     ) -> Response:
         """Send a request. Raises httpx.HTTPError on transport errors, PermissionError if robots.txt forbids it."""
         key = (method.upper(), url, data)
@@ -120,7 +131,8 @@ class HttpClient:
         with self._host_lock(host):
             self._throttle(host)
             r = self._client.request(
-                method, url, headers=headers, content=data, follow_redirects=follow_redirects
+                method, url, headers=headers, content=data, follow_redirects=follow_redirects,
+                timeout=timeout if timeout is not None else self.timeout,
             )
             self.request_count += 1
         resp = Response(str(r.url), r.status_code, r.text[:MAX_BODY_CHARS], dict(r.headers), r.content[:MAX_BODY_CHARS * 4])
@@ -146,4 +158,4 @@ class HttpClient:
                 parser = None
             self._robots[base] = parser
         parser = self._robots[base]
-        return parser is None or parser.can_fetch(USER_AGENT, url)
+        return parser is None or parser.can_fetch(self.user_agent, url)

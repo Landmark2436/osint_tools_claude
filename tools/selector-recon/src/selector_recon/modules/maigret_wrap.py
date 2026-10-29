@@ -3,7 +3,7 @@
 Restrictions compared to plain Maigret, to stay inside selector-recon's rules:
 - sites marked `tls_fingerprint` are skipped (Maigret would impersonate a browser TLS fingerprint),
 - the Cloudflare bypass stays off, no cookies, no Tor/I2P,
-- every request carries selector-recon's honest User-Agent instead of a random or fake browser one,
+- every request carries selector-recon's User-Agent instead of a random one (honest by default),
 - no recursive search: usernames and links found on profiles become pivot hints only.
 """
 
@@ -15,7 +15,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-from ..http import USER_AGENT
 from ..models import Finding, Pivot, Selector, SelectorType, Status
 from ..util import short, site_key
 from .base import Module, RunContext
@@ -58,7 +57,7 @@ class Maigret(Module):
                 skipped += 1
                 continue
             site.headers = {k: v for k, v in (site.headers or {}).items() if k.lower() != "user-agent"}
-            site.headers["User-Agent"] = USER_AGENT
+            site.headers["User-Agent"] = ctx.user_agent
             kept[name] = site
         return kept, skipped
 

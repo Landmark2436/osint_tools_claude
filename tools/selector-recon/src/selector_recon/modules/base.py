@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from ..models import Confidence, Finding, Selector, SelectorType, Status
 
 if TYPE_CHECKING:
+    from ..dnsutil import DnsClient
     from ..http import HttpClient
 
 log = logging.getLogger("selector_recon")
@@ -23,11 +24,16 @@ class RunContext:
 
     http: HttpClient
     out_dir: Path
+    dns: DnsClient | None = None
     timeout: float = 10.0
     include_nsfw: bool = True
     cache_dir: Path | None = None
     options: dict[str, Any] = field(default_factory=dict)
     browser: Any = None  # set by the runner when a browser module runs
+
+    @property
+    def user_agent(self) -> str:
+        return self.http.user_agent
 
     def env(self, name: str) -> str | None:
         value = os.environ.get(name, "").strip()
@@ -63,6 +69,15 @@ class Module:
 
     def run(self, selector: Selector, ctx: RunContext) -> list[Finding]:
         raise NotImplementedError
+
+    def not_public(self, selector: Selector) -> list[Finding] | None:
+        """For IP selectors: a single finding if the address is not globally routable, else None."""
+        import ipaddress
+
+        if selector.type is SelectorType.IP and not ipaddress.ip_address(selector.value).is_global:
+            return [self.finding(selector, self.title, Status.NOT_FOUND, confidence=Confidence.HIGH,
+                                 evidence="not a public address; no lookup made")]
+        return None
 
     # Helpers so modules build findings consistently.
     def finding(self, selector: Selector, source: str, status: Status, **kwargs: Any) -> Finding:

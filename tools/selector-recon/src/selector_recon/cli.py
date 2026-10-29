@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -46,6 +47,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--pivot", type=int, choices=[0, 1], default=0, help="follow pivot hints one level deep (default 0)")
     p.add_argument("--no-nsfw", action="store_true", help="skip sites tagged NSFW (included by default)")
     p.add_argument("--obey-robots", action="store_true", help="also apply robots.txt to plain HTTP modules")
+    p.add_argument("--browser-ua", action="store_true",
+                   help="send a fixed desktop-browser User-Agent instead of the honest selector-recon one")
+    p.add_argument("--dns-server", action="append", metavar="IP", help="DNS server to use instead of the system resolver (repeatable)")
+    p.add_argument("--env-file", type=Path, default=Path(".env"), help="file with API keys as KEY=value (default ./.env)")
     p.add_argument("--region", default=None, help="default region for phone numbers without +country code, e.g. DE")
     p.add_argument("--wmn-data", type=Path, help="use this wmn-data.json instead of the pinned upstream copy")
     p.add_argument("--maigret-top", type=int, default=500, help="number of top-ranked Maigret sites (default 500)")
@@ -58,17 +63,37 @@ def build_parser() -> argparse.ArgumentParser:
 
 def list_modules() -> str:
     defaults = set(parse_module_spec(None))
-    lines = [f"{'module':<14} {'default':<8} {'types':<24} {'net':<4} {'browser':<8} {'key':<14} description"]
+    lines = [f"{'module':<14} {'default':<8} {'types':<24} {'net':<4} {'browser':<8} {'key':<17} description"]
     for name, m in all_modules().items():
         types = ",".join(sorted(t.value for t in m.selector_types))
         lines.append(
             f"{name:<14} {'yes' if name in defaults else 'opt-in':<8} {types:<24} {'yes' if m.needs_network else 'no':<4} "
-            f"{'yes' if m.needs_browser else 'no':<8} {m.needs_key or '-':<14} {m.description}"
+            f"{'yes' if m.needs_browser else 'no':<8} {m.needs_key or '-':<17} {m.description}"
         )
         reason = m.unavailable_reason()
         if reason:
             lines.append(f"{'':<14} unavailable: {reason}")
     return "\n".join(lines)
+
+
+def load_env_file(path: Path) -> list[str]:
+    """Load KEY=value lines into os.environ without overriding variables that are already set.
+
+    Returns the names that were loaded (never the values)."""
+    if not path.is_file():
+        return []
+    loaded = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip().removeprefix("export ").strip()
+        value = value.strip().strip("'\"")
+        if key and value and key not in os.environ:
+            os.environ[key] = value
+            loaded.append(key)
+    return loaded
 
 
 def read_selectors(args: argparse.Namespace) -> list[str]:
@@ -87,6 +112,10 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.WARNING, format="%(levelname)s %(name)s: %(message)s"
     )
+    # httpx logs full request URLs at debug level; some APIs (Shodan) take the key as a URL parameter.
+    for noisy in ("httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+    loaded = load_env_file(args.env_file)
     if args.list_modules:
         print(list_modules())
         return 0
@@ -110,6 +139,8 @@ def main(argv: list[str] | None = None) -> int:
         pivot=args.pivot,
         include_nsfw=not args.no_nsfw,
         obey_robots=args.obey_robots,
+        browser_ua=args.browser_ua,
+        dns_servers=args.dns_server,
         cache_dir=args.cache_dir,
         options={
             "workers": args.workers,
@@ -119,6 +150,8 @@ def main(argv: list[str] | None = None) -> int:
         },
     )
     progress = (lambda msg: None) if args.quiet else (lambda msg: print(msg, file=sys.stderr, flush=True))
+    if loaded:
+        progress(f"loaded from {args.env_file}: {', '.join(loaded)}")
     for s in selectors:
         progress(f"selector {s.value!r}: {s.type.value}")
     runner = Runner(config, progress=progress)

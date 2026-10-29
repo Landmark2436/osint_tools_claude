@@ -2,7 +2,8 @@
 
 Uses the site list bundled with the installed sherlock-project version, so
 results are reproducible for a pinned version. Sherlock's built-in Firefox
-User-Agent is replaced by selector-recon's honest one through per-site headers.
+User-Agent is replaced by selector-recon's through per-site headers (the honest
+tool string by default, a fixed browser string only with --browser-ua).
 """
 
 from __future__ import annotations
@@ -12,7 +13,6 @@ import io
 from pathlib import Path
 from typing import Any
 
-from ..http import USER_AGENT
 from ..models import Finding, Selector, SelectorType, Status
 from ..util import short, site_key
 from .base import Module, RunContext
@@ -43,7 +43,7 @@ class Sherlock(Module):
         data = {}
         for site in sites:
             info = dict(site.information)
-            info["headers"] = {**info.get("headers", {}), "User-Agent": USER_AGENT}
+            info["headers"] = {**info.get("headers", {}), "User-Agent": ctx.user_agent}
             data[site.name] = info
         return data
 
