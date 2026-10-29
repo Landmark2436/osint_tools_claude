@@ -1,0 +1,4 @@
+{"hash":"0c83f57c786a0b4a39efab23731c7ebc1ca2b6fd2f2c3b0a7e7e2c7d1d6e8c1a","display_name":"Alice Example","profile_url":"https://gravatar.com/alicectf",
+ "avatar_url":"https://0.gravatar.com/avatar/x","location":"Springfield","description":"CTF persona","job_title":"","company":"Example Corp","pronouns":"",
+ "verified_accounts":[{"service_type":"github","service_label":"GitHub","url":"https://github.com/alice-ctf","is_hidden":false},
+                      {"service_type":"mastodon","service_label":"Mastodon","url":"https://mastodon.example/@alice","is_hidden":true}]}

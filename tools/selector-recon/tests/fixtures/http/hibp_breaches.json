@@ -1,0 +1,4 @@
+[{"Name":"ExampleForum","Title":"Example Forum","Domain":"forum.example","BreachDate":"2019-05-01","AddedDate":"2020-01-02T00:00:00Z",
+  "PwnCount":12345,"Description":"…","DataClasses":["Email addresses","Usernames","Passwords"],"IsVerified":true,"IsSensitive":false},
+ {"Name":"ExampleList","Title":"Example List","Domain":"","BreachDate":"2021-03-04","AddedDate":"2021-04-05T00:00:00Z",
+  "PwnCount":99,"DataClasses":["Email addresses"],"IsVerified":false,"IsSensitive":false}]

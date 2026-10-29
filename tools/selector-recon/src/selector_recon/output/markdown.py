@@ -45,6 +45,8 @@ def render_markdown(result: RunResult, include_not_found: bool = False) -> str:
     ]
     for sel in result.selectors:
         rows = [f for f in result.findings if f.selector == sel.value and f.selector_type is sel.type]
+        links = [f for f in rows if "link only" in f.flags]
+        rows = [f for f in rows if "link only" not in f.flags]  # listed under Manual checks instead
         hidden = [f for f in rows if f.status is Status.NOT_FOUND]
         shown = rows if include_not_found else [f for f in rows if f.status is not Status.NOT_FOUND]
         shown.sort(key=lambda f: (_RANK[f.status], f.source.lower()))
@@ -59,6 +61,8 @@ def render_markdown(result: RunResult, include_not_found: bool = False) -> str:
             lines.append("No positive, blocked or inconclusive results.")
         if hidden and not include_not_found:
             lines += ["", f"{len(hidden)} source(s) reported not found; see findings.json or report.html."]
+        if links:
+            lines += ["", f"{len(links)} manual lookup link(s) under Manual checks."]
         lines.append("")
     if result.manual_checks:
         lines += ["## Manual checks", ""]
