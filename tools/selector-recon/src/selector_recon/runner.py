@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
+from .browser import BrowserSession, BrowserUnavailable
 from .dnsutil import DnsClient
 from .http import BROWSER_USER_AGENT, USER_AGENT, HttpClient
 from .models import Confidence, Finding, Pivot, Selector, Status, utc_now
@@ -30,6 +31,8 @@ class RunConfig:
     obey_robots: bool = False
     browser_ua: bool = False
     dns_servers: list[str] | None = None
+    no_browser: bool = False
+    browser_path: str | None = None
     cache_dir: Path | None = None
     options: dict[str, Any] = field(default_factory=dict)
 
@@ -154,10 +157,21 @@ class Runner:
             cache_dir=config.cache_dir,
             options=config.options,
         )
+        self.ctx.browser = BrowserSession(
+            out_dir=config.out_dir,
+            user_agent=self.http.user_agent,
+            timeout=max(config.timeout, 20.0),
+            executable_path=config.browser_path,
+        )
 
     def _skip_reason(self, module: Module) -> str | None:
         if self.config.offline and module.needs_network:
             return "offline mode"
+        if module.needs_browser:
+            if self.config.no_browser:
+                return "browser disabled (--no-browser)"
+            if self.ctx.browser.failure:
+                return self.ctx.browser.failure
         return module.unavailable_reason(self.ctx)
 
     def run(self, selectors: Iterable[Selector]) -> RunResult:
@@ -188,6 +202,8 @@ class Runner:
         except KeyboardInterrupt:
             interrupted = True
             self.progress("interrupted, writing partial results")
+        finally:
+            self.ctx.browser.close()
         cross_check(findings)
         return RunResult(
             started=started,
@@ -203,7 +219,7 @@ class Runner:
         out: list[Finding] = []
         modules = [get_module(n) for n in self.module_names]
         # Browser modules run last and one at a time; the rest run in the order given.
-        modules.sort(key=lambda m: m.needs_browser)
+        modules.sort(key=lambda m: (m.needs_browser, m.run_last))
         for module in modules:
             if sel.type not in module.selector_types:
                 continue
@@ -214,11 +230,17 @@ class Runner:
                 continue
             self.progress(f"[{sel}] {module.name}: running")
             t0 = time.monotonic()
+            self.ctx.findings = out  # browser adapters such as screenshots work on earlier results
             try:
+                self.ctx.note = ""
                 result = module.run(sel, self.ctx)
-                state, why = "ran", ""
+                state, why = "ran", self.ctx.note
             except KeyboardInterrupt:
                 raise
+            except BrowserUnavailable as exc:
+                runs.append(ModuleRun(sel.value, module.name, "skipped", str(exc), round=round_))
+                self.progress(f"[{sel}] {module.name}: skipped ({exc})")
+                continue
             except Exception as exc:  # a failing module never fails the run
                 log.debug("module %s failed", module.name, exc_info=True)
                 result = [module.finding(sel, module.title, Status.ERROR, evidence=f"module failed: {type(exc).__name__}: {exc}")]

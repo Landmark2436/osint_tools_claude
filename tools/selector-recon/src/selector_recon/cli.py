@@ -50,6 +50,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--browser-ua", action="store_true",
                    help="send a fixed desktop-browser User-Agent instead of the honest selector-recon one")
     p.add_argument("--dns-server", action="append", metavar="IP", help="DNS server to use instead of the system resolver (repeatable)")
+    p.add_argument("--no-browser", action="store_true", help="skip all browser adapters")
+    p.add_argument("--browser-path", help="Chromium/Chrome executable for browser adapters (default: Playwright's)")
+    p.add_argument("--max-screenshots", type=int, default=30, help="cap for the screenshots adapter (default 30)")
     p.add_argument("--env-file", type=Path, default=Path(".env"), help="file with API keys as KEY=value (default ./.env)")
     p.add_argument("--region", default=None, help="default region for phone numbers without +country code, e.g. DE")
     p.add_argument("--wmn-data", type=Path, help="use this wmn-data.json instead of the pinned upstream copy")
@@ -141,12 +144,15 @@ def main(argv: list[str] | None = None) -> int:
         obey_robots=args.obey_robots,
         browser_ua=args.browser_ua,
         dns_servers=args.dns_server,
+        no_browser=args.no_browser,
+        browser_path=args.browser_path,
         cache_dir=args.cache_dir,
         options={
             "workers": args.workers,
             "region": args.region,
             "wmn_data": str(args.wmn_data) if args.wmn_data else None,
             "maigret_top": args.maigret_top,
+            "max_screenshots": args.max_screenshots,
         },
     )
     progress = (lambda msg: None) if args.quiet else (lambda msg: print(msg, file=sys.stderr, flush=True))

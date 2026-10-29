@@ -27,7 +27,8 @@ sherlock = ["sherlock-project>=0.16.2,<0.17"]
 maigret = ["maigret>=0.6.6,<0.7"]
 # GPL-3.0, opt-in module. Pinned to the last upstream commit (PyPI 1.61 predates the duolingo check).
 holehe = ["holehe @ git+https://github.com/megadose/holehe@14da70f588538936b20d238783c5e28a0772a2b3"]
-all = ["selector-recon[sherlock,maigret]"]
+browser = ["playwright>=1.63,<2"]
+all = ["selector-recon[sherlock,maigret,browser]"]
 dev = ["pytest>=8"]
 
 [project.scripts]

@@ -41,6 +41,7 @@ class Maigret(Module):
     homepage = "https://github.com/soxoj/maigret"
     license = "MIT"
     tos = "Plain GET of public profile pages; each site's own ToS applies. Impersonation and bypass features disabled."
+    profile_pages = True
     can_notify = "no"
 
     def load_sites(self, ctx: RunContext) -> tuple[dict[str, Any], int]:

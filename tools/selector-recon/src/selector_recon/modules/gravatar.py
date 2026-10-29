@@ -33,6 +33,7 @@ class Gravatar(Module):
     homepage = "https://docs.gravatar.com/"
     license = "API"
     tos = "Public profile API; optional API key raises the rate limit. Gravatar ToS apply."
+    profile_pages = True
     can_notify = "no"
     avatar_base = "https://gravatar.com/avatar/"
     api_base = "https://api.gravatar.com/v3/profiles/"

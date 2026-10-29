@@ -29,7 +29,9 @@ class RunContext:
     include_nsfw: bool = True
     cache_dir: Path | None = None
     options: dict[str, Any] = field(default_factory=dict)
-    browser: Any = None  # set by the runner when a browser module runs
+    browser: Any = None  # BrowserSession, set by the runner; started only when a browser module runs
+    findings: list[Finding] = field(default_factory=list)  # earlier findings for the current selector
+    note: str = ""  # one-line summary a module may leave for the module table; the runner clears it
 
     @property
     def user_agent(self) -> str:
@@ -57,6 +59,8 @@ class Module:
     license: ClassVar[str] = ""
     tos: ClassVar[str] = ""
     can_notify: ClassVar[str] = "no"
+    profile_pages: ClassVar[bool] = False  # its found URLs are profile pages worth a screenshot
+    run_last: ClassVar[bool] = False  # browser post-processing that needs the other modules' results
 
     def unavailable_reason(self, ctx: RunContext | None = None) -> str | None:
         """Why this module cannot run right now, or None if it can."""
@@ -90,3 +94,18 @@ class Module:
             status=status,
             **kwargs,
         )
+
+
+class BrowserModule(Module):
+    """Base for adapters that need a rendered page. Skipped cleanly when no browser is available."""
+
+    needs_browser = True
+    requires = ("playwright",)
+    install_hint = "pip install '.[browser]' && playwright install chromium"
+
+    def open_page(self, selector: Selector, ctx: RunContext, url: str, source: str):
+        """Open url after a robots.txt check. Returns a PageResult, or a Finding if the page may not be opened."""
+        if not ctx.http.robots_allowed(url):
+            return self.finding(selector, source, Status.UNKNOWN, url=url, manual=True,
+                                evidence="robots.txt disallows automated access: open it yourself")
+        return ctx.browser.open(url, f"{self.name}-{source}")

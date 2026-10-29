@@ -60,6 +60,7 @@ class WhatsMyName(Module):
     homepage = "https://github.com/WebBreacher/WhatsMyName"
     license = "data CC BY-SA 4.0"
     tos = "Plain GET/POST of public profile pages; each site's own ToS applies. Rate-limited per host."
+    profile_pages = True
     can_notify = "no (sites that list profile visitors are rare; none are logged in)"
 
     def run(self, selector: Selector, ctx: RunContext) -> list[Finding]:

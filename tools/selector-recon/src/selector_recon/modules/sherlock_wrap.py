@@ -28,6 +28,7 @@ class Sherlock(Module):
     homepage = "https://github.com/sherlock-project/sherlock"
     license = "MIT"
     tos = "Plain GET of public profile pages; each site's own ToS applies."
+    profile_pages = True
     can_notify = "no"
 
     def load_sites(self, ctx: RunContext) -> dict[str, dict[str, Any]]:
