@@ -6,16 +6,16 @@ A growing collection of small, self-contained **OSINT (open-source intelligence)
 
 | Tool | Description | Status / Version | Link |
 |---|---|---|---|
-| Geo Triangulator | Estimates a target's position or possible area from points with distances (radii) and/or bearings, using least squares on an OpenStreetMap map | beta · v0.1.1 | [Open](tools/geo-triangulator/index.html) · [README](tools/geo-triangulator/README.md) |
+| Geo Triangulator | Estimates a target's position or possible area from points with distances (radii) and/or bearings, using least squares on an OpenStreetMap map | beta · v0.1.2 | [Open](tools/geo-triangulator/index.html) · [README](tools/geo-triangulator/README.md) |
 
 ## Usage
 
 1. Download the repository as a ZIP or clone it: `git clone https://github.com/landmark2436/osint_tools_claude.git`
 2. Open `tools/<tool-name>/index.html` in a current browser (double-click), or open the [landing page](index.html).
 
-Some tools load libraries from a CDN and map tiles from the internet, so they need an online connection.
+Some tools load libraries from a CDN and map tiles from the internet, so they need an online connection. **Map tools:** OpenStreetMap blocks map tiles for pages opened as local files (`file://`), so use the GitHub Pages version for them.
 
-**GitHub Pages (optional):** enable Pages for this repository (*Settings → Pages → Deploy from branch*, root folder). The landing page is then served at `https://<user>.github.io/<repo>/`. No changes to the files are needed.
+**GitHub Pages:** enable Pages for this repository (*Settings → Pages → Deploy from branch*, root folder). The landing page is then served at <https://landmark2436.github.io/osint_tools_claude/>. No changes to the files are needed.
 
 ## Repository structure
 

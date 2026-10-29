@@ -168,6 +168,10 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
 .target-marker.alt::before, .target-marker.alt::after { background: #9c36b5; }
 .target-label { font: 700 11px system-ui, sans-serif; color: #e03131; text-shadow: 0 0 3px #fff, 0 0 3px #fff; white-space: nowrap; }
 .leaflet-container { font: 12px/1.4 system-ui, sans-serif; }
+.file-notice { background: var(--panel); color: var(--text); border: 1px solid var(--warn); border-left: 4px solid var(--warn); border-radius: 8px; padding: 8px 30px 8px 10px; max-width: min(420px, calc(100vw - 40px)); font-size: 13px; line-height: 1.45; box-shadow: 0 2px 8px rgba(0,0,0,.2); position: relative; }
+.file-notice a { color: var(--accent); font-weight: 600; }
+.file-notice code { background: var(--panel-2); padding: 0 3px; border-radius: 3px; }
+.file-notice-close { position: absolute; top: 4px; right: 4px; padding: 0 6px; font-size: 12px; background: transparent; border: 0; }
 .leaflet-tooltip.pt-tip { font-weight: 600; }
 :root[data-theme="dark"] .leaflet-bar a, :root[data-theme="dark"] .leaflet-control-layers { background: var(--panel); color: var(--text); border-color: var(--border); }
 </style>
@@ -298,7 +302,7 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
       <ul>
         <li>Calculations run on a spherical earth (R = 6371 km) in a local azimuthal equidistant projection. Accuracy is excellent up to several hundred kilometres; don’t use it across the poles or the ±180° meridian.</li>
         <li>Everything runs locally in your browser; inputs are stored only in this browser’s localStorage. Nothing is uploaded except map tile requests.</li>
-        <li>The standard OpenStreetMap tile server blocks pages opened as a local file (“Access blocked”). When opened via <code>file://</code> the tool therefore starts with the CARTO Voyager base map (also OpenStreetMap data). Standard OSM tiles are used automatically when the file is hosted on a web server. You can switch base maps with the layer button (top right of the map).</li>
+        <li>OpenStreetMap's tile servers require the web address of the requesting page (HTTP Referer). A file opened by double-click (<code>file://</code>) has none, so the map shows “Access blocked”. Open the tool from a web address instead, e.g. via GitHub Pages or any web server. All calculations, import/export and the self-test work without the map tiles.</li>
       </ul>
     </details>
   </section>
@@ -311,26 +315,20 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
 /* =====================================================================
  * 1. CONFIGURATION
  * ===================================================================== */
-const APP_VERSION = '0.1.1';
+const APP_VERSION = '0.1.2';
 const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors';
 
-// Alternative base maps (all based on OpenStreetMap data). Useful if the
-// standard OSM tile server refuses requests from file:// pages.
+// Alternative base map (OpenStreetMap data, community server).
 const ALT_TILE_LAYERS = [
   { name: 'OSM Humanitarian', url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', subdomains: 'abc', maxZoom: 19, filterable: true,
     attribution: TILE_ATTRIBUTION + ', tiles by <a href="https://www.hotosm.org/" target="_blank" rel="noopener">HOT</a> / OSM France' },
-  { name: 'CARTO Voyager', url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', subdomains: 'abcd', maxZoom: 20, filterable: true,
-    attribution: TILE_ATTRIBUTION + ' &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>' },
-  { name: 'CARTO Dark Matter', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', subdomains: 'abcd', maxZoom: 20, filterable: false,
-    attribution: TILE_ATTRIBUTION + ' &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>' },
 ];
 
-// The OSM tile servers block requests without an HTTP Referer, which is what a
-// page opened via file:// sends. In that case this OSM-based layer is used by default.
+// The OSM tile servers require an HTTP Referer. Pages opened via file:// send
+// none, so tiles are blocked there; a notice then points to the hosted version.
 const IS_LOCAL_FILE = location.protocol === 'file:';
-const FILE_DEFAULT_TILE_LAYER = 'CARTO Voyager';
-const OSM_LAYER_NAME = IS_LOCAL_FILE ? 'OpenStreetMap (web hosting only)' : 'OpenStreetMap';
+const HOSTED_URL = 'https://landmark2436.github.io/osint_tools_claude/tools/geo-triangulator/';
 
 const CONFIG = {
   STORAGE_KEY: 'geoTriangulator.v1',
@@ -1402,14 +1400,13 @@ const MapView = {
   init() {
     this.map = L.map('map', { zoomControl: true, worldCopyJump: true }).setView([CONFIG.DEFAULT_VIEW.lat, CONFIG.DEFAULT_VIEW.lon], CONFIG.DEFAULT_VIEW.zoom);
     const bases = {
-      [OSM_LAYER_NAME]: L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTRIBUTION, className: 'tiles-filterable' }),
+      OpenStreetMap: L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTRIBUTION, className: 'tiles-filterable' }),
     };
     for (const t of ALT_TILE_LAYERS) {
       bases[t.name] = L.tileLayer(t.url, { maxZoom: t.maxZoom, subdomains: t.subdomains, attribution: t.attribution, className: t.filterable ? 'tiles-filterable' : '' });
     }
     const ctx = IS_LOCAL_FILE ? 'file' : 'web';
-    const fallback = IS_LOCAL_FILE ? FILE_DEFAULT_TILE_LAYER : OSM_LAYER_NAME;
-    (bases[State.baseLayers[ctx]] || bases[fallback] || bases[OSM_LAYER_NAME]).addTo(this.map);
+    (bases[State.baseLayers[ctx]] || bases.OpenStreetMap).addTo(this.map);
     L.control.layers(bases, null, { position: 'topright' }).addTo(this.map);
     L.control.scale({ imperial: false }).addTo(this.map);
     this.map.on('baselayerchange', (e) => { State.baseLayers[ctx] = e.name; State.save(); });
@@ -1417,6 +1414,7 @@ const MapView = {
     Object.values(bases).forEach((b) => b.on('tileerror', () => {
       if (++tileErrors === 6) UI.toast('Map tiles fail to load. Check the internet connection or choose another base map (layer button, top right).', 6000);
     }));
+    if (IS_LOCAL_FILE) this.addLocalFileNotice();
     this.obsLayer = L.layerGroup().addTo(this.map);
     this.resultLayer = L.layerGroup().addTo(this.map);
     this.map.on('click', (e) => {
@@ -1426,6 +1424,24 @@ const MapView = {
       UI.highlightRow(p.id, true);
       scheduleRecalc(0);
     });
+  },
+
+  /** Explains why OSM tiles are blocked for file:// pages and links to the hosted version. */
+  addLocalFileNotice() {
+    const Notice = L.Control.extend({
+      onAdd() {
+        const div = L.DomUtil.create('div', 'file-notice');
+        div.innerHTML = `<button type="button" class="file-notice-close" aria-label="Close notice" title="Close">✕</button>
+          <b>Map shows “Access blocked”?</b> OpenStreetMap does not deliver map tiles to pages opened as a local file (<code>file://</code>).
+          Open the <a href="${HOSTED_URL}" target="_blank" rel="noopener">online version</a> instead, or put the file on any web server.
+          All calculations work regardless of the map background.`;
+        L.DomEvent.disableClickPropagation(div);
+        L.DomEvent.disableScrollPropagation(div);
+        div.querySelector('button').addEventListener('click', () => this.remove());
+        return div;
+      },
+    });
+    new Notice({ position: 'bottomleft' }).addTo(this.map);
   },
 
   markerIcon(label, selected) {

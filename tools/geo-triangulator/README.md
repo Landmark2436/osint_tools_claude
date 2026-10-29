@@ -2,12 +2,16 @@
 
 Estimates the position, or the possible area, of an unknown target from known WGS84 points with measured **distances (radii)** and/or **bearings**. The result is shown on an OpenStreetMap map with an error ellipse and residuals.
 
-**Status:** beta · **Version:** 0.1.1 · **Open:** [`index.html`](index.html)
+**Status:** beta · **Version:** 0.1.2 · **Open:** [`index.html`](index.html)
 
 ## Quick start
 
+**Online (recommended):** <https://landmark2436.github.io/osint_tools_claude/tools/geo-triangulator/> (once GitHub Pages is enabled for this repository).
+
+**Offline copy:**
+
 1. Download or clone this repository.
-2. Open `tools/geo-triangulator/index.html` in a current browser (double-click; no installation, no server).
+2. Open `tools/geo-triangulator/index.html` in a current browser (double-click; no installation, no server). Calculations work fully, but OpenStreetMap blocks the map tiles for local files (see [Limitations](#limitations)).
 3. Click on the map to add points, or choose **Load example…** to see a demo.
 4. Enter a radius (m) and/or a bearing (°) for each point. The result updates automatically.
 
@@ -95,7 +99,7 @@ A `FeatureCollection` of `Point` (or `MultiPoint`) features. Point attributes ar
 - The result can only be as good as the inputs. Wrong radii, bearings or σ values give wrong positions, and a small error ellipse does not prove correctness.
 - Spherical earth model. Accurate to the millimetre level for distances up to a few hundred kilometres; less suitable for continental distances. Not for use across the poles or the ±180° meridian.
 - Map tiles and libraries need an internet connection.
-- The standard OpenStreetMap tile server blocks pages opened via `file://` (“Access blocked”, because no HTTP Referer is sent). The tool therefore starts with the **CARTO Voyager** base map (OpenStreetMap data) when opened as a local file. When hosted on a web server it uses the standard OSM tiles. The base map can be switched with the layer button (top right). The choice is remembered separately for local and hosted use.
+- **Map tiles and `file://`:** OpenStreetMap's tile servers require an HTTP Referer, i.e. the web address of the requesting page. A file opened by double-click (`file://`) sends none, so the map shows “Access blocked” (see [osm.wiki/Blocked](https://osm.wiki/Blocked)). The page cannot add a Referer itself. Use the tool from a web address instead: the [online version on GitHub Pages](https://landmark2436.github.io/osint_tools_claude/tools/geo-triangulator/) or any web server. Opened locally, the tool shows a notice with that link. All calculations, import/export and the self-test still work without the map background.
 - Two radii, or one radius plus one bearing from different points, are inherently ambiguous: two positions are reported.
 
 ## Self-test
@@ -125,9 +129,14 @@ All data stays in your browser (localStorage). The only network requests are the
 | [Leaflet](https://leafletjs.com/) | 1.9.4 (pinned) | BSD-2-Clause | `https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/` |
 | [Turf.js](https://turfjs.org/) | 7.1.0 (pinned) | MIT | `https://unpkg.com/@turf/turf@7.1.0/turf.min.js` |
 | Map data | – | [ODbL](https://opendatacommons.org/licenses/odbl/) | © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors |
-| Map tiles | – | – | OpenStreetMap standard tiles (default when hosted), CARTO Voyager (default via `file://`, © CARTO); optional: OSM Humanitarian (OSM France), CARTO Dark Matter |
+| Map tiles | – | [Tile usage policy](https://operations.osmfoundation.org/policies/tiles/) | OpenStreetMap standard tiles (default); optional: OSM Humanitarian (OSM France) |
 
 ## Changelog
+
+### v0.1.2 – 2026-10-29
+
+- Removed the CARTO base maps: CARTO now requires an API key.
+- OpenStreetMap is the default base map again everywhere. When opened via `file://`, a notice explains why the tiles are blocked and links to the online version.
 
 ### v0.1.1 – 2026-10-29
 
