@@ -6,7 +6,7 @@ A growing collection of small, self-contained **OSINT (open-source intelligence)
 
 | Tool | Description | Status / Version | Link |
 |---|---|---|---|
-| Geo Triangulator | Estimates a target's position or possible area from points with distances (radii) and/or bearings, using least squares on an OpenStreetMap map | beta · v0.1.2 | [Open](tools/geo-triangulator/index.html) · [README](tools/geo-triangulator/README.md) |
+| Geo Triangulator | Estimates a target's position or possible area from points with distances (radii) and/or bearings, using least squares on an OpenStreetMap map | beta · v0.1.3 | [Open](tools/geo-triangulator/index.html) · [README](tools/geo-triangulator/README.md) |
 
 ## Usage
 

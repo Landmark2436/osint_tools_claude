@@ -100,6 +100,8 @@ select { padding: 6px 8px; }
 label.toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
 .muted { color: var(--muted); }
 .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+.paste-row { display: flex; gap: 6px; margin: 4px 0 8px; }
+.paste-row input { flex: 1; min-width: 0; padding: 6px 8px; }
 .mode-used { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--border); }
 
 /* Points table */
@@ -210,6 +212,10 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
       <div class="toolbar">
         <label class="toggle"><input type="checkbox" id="clickAdd" checked> Add point on map click</label>
       </div>
+      <div class="paste-row">
+        <input type="text" id="pasteInput" placeholder="Paste coordinates, e.g. 48.101440, 11.588161" aria-label="Paste coordinates" autocomplete="off" spellcheck="false">
+        <button id="btnPasteAdd" type="button">Add</button>
+      </div>
       <div class="toolbar">
         <button id="btnAddRow" type="button">+ Add row</button>
         <select id="exampleSelect" aria-label="Load example">
@@ -274,11 +280,19 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
       <summary>Help &amp; user guide</summary>
       <h3>Quick start</h3>
       <ol>
-        <li>Add measurement points: click on the map (toggle “Add point on map click”), use “+ Add row”, import a file, or load an example.</li>
+        <li>Add measurement points: click on the map (toggle “Add point on map click”), paste coordinates, use “+ Add row”, import a file, or load an example.</li>
         <li>For each point enter a <b>radius</b> (distance to the target in metres) and/or a <b>bearing</b> (direction to the target in degrees, clockwise from true north, 0 = north, 90 = east).</li>
         <li>Optionally enter uncertainties (σ = one standard deviation). They weight the measurements in the adjustment.</li>
         <li>The result updates automatically. In “Automatic” mode the app picks the matching method and shows which one it used.</li>
       </ol>
+      <h3>Pasting coordinates</h3>
+      <p>Coordinates copied e.g. from Google Maps can be pasted in three ways: into the “Paste coordinates” field (Enter or “Add”), anywhere on the page with Ctrl+V / ⌘V (outside input fields), or into a Lat/Lon cell of the table (fills both). Several lines create several points. Accepted formats:</p>
+      <ul>
+        <li>Decimal degrees, latitude first: <code>48.101440, 11.588161</code> · <code>48.101440 11.588161</code> · <code>48,101440; 11,588161</code></li>
+        <li>With hemisphere letters: <code>48.1014° N, 11.5882° E</code> · <code>N 48.1014 E 11.5882</code></li>
+        <li>Degrees, minutes, seconds: <code>48°06'05.2"N 11°35'17.4"E</code> · degrees and decimal minutes: <code>48°06.087'N 11°35.290'E</code></li>
+        <li>Google Maps / OpenStreetMap links containing the position (e.g. <code>…/@48.101440,11.588161,17z</code> or <code>…?q=48.101440,11.588161</code>)</li>
+      </ul>
       <h3>Modes</h3>
       <ul>
         <li><b>1 · One radius:</b> the target lies inside (or on) the circle. Area and circumference are shown. One circle cannot fix a position.</li>
@@ -315,7 +329,7 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
 /* =====================================================================
  * 1. CONFIGURATION
  * ===================================================================== */
-const APP_VERSION = '0.1.2';
+const APP_VERSION = '0.1.3';
 const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors';
 
@@ -1250,6 +1264,70 @@ function parsePoint(p, index) {
 /* =====================================================================
  * 4. IMPORT / EXPORT  (CSV, GeoJSON)
  * ===================================================================== */
+/* ---------- Coordinate text parsing (pure) ---------- */
+const CoordParser = {
+  num(s) { return Number(String(s).replace(',', '.')); },
+  valid(lat, lon) { return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180; },
+  result(lat, lon) { return this.valid(lat, lon) ? { lat, lon } : null; },
+
+  /**
+   * Parse one coordinate pair from free text. Supported:
+   *  - map links: Google "!3d<lat>!4d<lon>" (place pin), "@<lat>,<lon>", "?q=/ll=/query=/center=<lat>,<lon>",
+   *    OpenStreetMap "#map=<z>/<lat>/<lon>" or "mlat=…&mlon=…"
+   *  - decimal degrees "lat, lon" (separator comma, semicolon or whitespace; decimal comma allowed)
+   *  - hemisphere letters and/or degrees–minutes–seconds, e.g. 48°06'05.2"N 11°35'17.4"E
+   * Latitude is expected first unless hemisphere letters say otherwise. Returns {lat, lon} or null.
+   */
+  parse(text) {
+    if (text === null || text === undefined) return null;
+    let t = String(text).trim();
+    if (!t) return null;
+    try { t = decodeURIComponent(t); } catch (e) { /* keep raw text */ }
+    let m;
+    if ((m = t.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/))) return this.result(+m[1], +m[2]);
+    if ((m = t.match(/mlat=(-?\d+(?:\.\d+)?)&(?:amp;)?mlon=(-?\d+(?:\.\d+)?)/))) return this.result(+m[1], +m[2]);
+    if ((m = t.match(/#map=\d+(?:\.\d+)?\/(-?\d+(?:\.\d+)?)\/(-?\d+(?:\.\d+)?)/))) return this.result(+m[1], +m[2]);
+    if ((m = t.match(/[?&](?:q|ll|query|center|destination)=(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/))) return this.result(+m[1], +m[2]);
+    if ((m = t.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/))) return this.result(+m[1], +m[2]);
+
+    // Plain decimal pair: "48.101440, 11.588161", "48,1014; 11,5882", "48.1014 11.5882", "(48.1, 11.5)"
+    const plain = t.replace(/^[(\[{\s]+|[)\]}\s]+$/g, '');
+    const N = '([+-]?\\d{1,3}(?:[.,]\\d+)?)';
+    if ((m = plain.match(new RegExp('^' + N + '\\s*[,;\\s]\\s*' + N + '$')))) return this.result(this.num(m[1]), this.num(m[2]));
+
+    // Hemisphere letters and/or DMS: two components, each [NSEW]? deg[°] [min['] [sec["]]] [NSEW]?
+    const comp = /([NSEWnsew])?\s*([+-]?\d+(?:[.,]\d+)?)\s*(?:°|º|deg|\s(?=\d))?\s*(?:(\d+(?:[.,]\d+)?)\s*(?:'|′|’|min)\s*)?(?:(\d+(?:[.,]\d+)?)\s*(?:"|″|”|''|sec)\s*)?([NSEWnsew])?/g;
+    const parts = [];
+    let c;
+    while ((c = comp.exec(t)) && parts.length < 3) {
+      if (c[0].trim() === '') { comp.lastIndex++; continue; }
+      if (c[1] && c[5]) comp.lastIndex -= 1; // "N 48.1 E 11.5": the trailing letter belongs to the next component
+      const deg = this.num(c[2]), min = c[3] ? this.num(c[3]) : 0, sec = c[4] ? this.num(c[4]) : 0;
+      if (min >= 60 || sec >= 60) return null;
+      const hemi = (c[1] || c[5] || '').toUpperCase(); // leading letter wins
+      let v = Math.abs(deg) + min / 60 + sec / 3600;
+      if (deg < 0 || hemi === 'S' || hemi === 'W') v = -v;
+      parts.push({ v, hemi });
+    }
+    if (parts.length !== 2) return null;
+    const [a, b] = parts;
+    const isLon = (p) => p.hemi === 'E' || p.hemi === 'W', isLat = (p) => p.hemi === 'N' || p.hemi === 'S';
+    if (isLon(a) || isLat(b)) { if (isLat(a) || isLon(b)) return null; return this.result(b.v, a.v); }
+    return this.result(a.v, b.v);
+  },
+
+  /** Parse several lines; returns {points: [{lat, lon}], failed: [line]} */
+  parseLines(text) {
+    const points = [], failed = [];
+    for (const line of String(text || '').split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      const p = this.parse(line);
+      if (p) points.push(p); else failed.push(line.trim());
+    }
+    return { points, failed };
+  },
+};
+
 const IO = {
   FIELDS: ['name', 'lat', 'lon', 'radius', 'sigmaR', 'bearing', 'sigmaB', 'visible'],
   CSV_HEADER: ['name', 'lat', 'lon', 'radius_m', 'sigma_radius_m', 'bearing_deg', 'sigma_bearing_deg', 'visible'],
@@ -1617,6 +1695,38 @@ const UI = {
       const tr = e.target.closest('tr[data-id]');
       if (tr) this.highlightRow(Number(tr.dataset.id), false);
     });
+    // Pasting a full coordinate pair into a Lat or Lon cell fills both cells
+    tbody.addEventListener('paste', (e) => {
+      const inp = e.target, f = inp.dataset && inp.dataset.f;
+      if (f !== 'lat' && f !== 'lon') return;
+      const c = CoordParser.parse(this.clipboardText(e));
+      if (!c) return; // not a pair → normal paste of a single value
+      e.preventDefault();
+      const tr = inp.closest('tr[data-id]'), p = State.byId(Number(tr.dataset.id));
+      if (!p) return;
+      p.lat = c.lat.toFixed(6); p.lon = c.lon.toFixed(6);
+      this.updateRowCoords(p.id);
+      scheduleRecalc(0);
+    });
+
+    // Paste field and page-wide paste
+    const pasteInput = $('#pasteInput');
+    $('#btnPasteAdd').addEventListener('click', () => { if (this.addFromText(pasteInput.value)) pasteInput.value = ''; });
+    pasteInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); if (this.addFromText(pasteInput.value)) pasteInput.value = ''; }
+    });
+    pasteInput.addEventListener('paste', (e) => {
+      const text = this.clipboardText(e);
+      if (!/\n/.test(text.trim())) return; // single line → let it land in the field
+      e.preventDefault(); // multi-line text would lose its line breaks in a text field
+      this.addFromText(text);
+    });
+    document.addEventListener('paste', (e) => {
+      const el = e.target;
+      if (el && el.closest && el.closest('input, textarea, select, [contenteditable="true"]')) return;
+      const text = this.clipboardText(e);
+      if (CoordParser.parseLines(text).points.length) { e.preventDefault(); this.addFromText(text); }
+    });
 
     // Import / export
     $('#btnImport').addEventListener('click', () => $('#fileInput').click());
@@ -1653,6 +1763,29 @@ const UI = {
 
     $('#btnTests').addEventListener('click', () => this.runTests());
     this.renderTable();
+  },
+
+  clipboardText(e) {
+    const cd = e.clipboardData || window.clipboardData;
+    return cd ? cd.getData('text') || cd.getData('Text') || '' : '';
+  },
+
+  /** Add one point per parsable line of text. Returns true if at least one point was added. */
+  addFromText(text) {
+    const { points, failed } = CoordParser.parseLines(text);
+    if (!points.length) {
+      this.toast(String(text || '').trim() ? 'No coordinates recognised. Example: 48.101440, 11.588161' : 'Paste coordinates first, e.g. 48.101440, 11.588161', 4000);
+      return false;
+    }
+    let last = null;
+    points.forEach((c) => { last = State.add({ lat: c.lat.toFixed(6), lon: c.lon.toFixed(6) }); });
+    this.renderTable();
+    this.highlightRow(last.id, true);
+    recalc();
+    if (State.points.length > 1) MapView.fit(false);
+    else MapView.map.setView([points[0].lat, points[0].lon], Math.max(MapView.map.getZoom(), 14));
+    this.toast(`Added ${points.length} point(s)` + (failed.length ? `; ${failed.length} line(s) not recognised: ${failed.slice(0, 2).join(' | ')}` : '.'), failed.length ? 5000 : 2200);
+    return true;
   },
 
   applyTheme() {
@@ -1968,6 +2101,25 @@ const Tests = (() => {
       const c = Modes.delaunay([st(90, 0), st(90, 1000), st(90, 2000)]);
       return ok(a.data.triangles === 2 && b.data.triangles === 4 && b.data.edges === 8 && c.status === 'error',
         `square: ${a.data.triangles} triangles; square+centre: ${b.data.triangles} triangles / ${b.data.edges} edges; collinear: ${c.status}`);
+    } },
+    { name: 'Pasting coordinates (decimal, DMS, map links)', run() {
+      const exp = { lat: 48.10144, lon: 11.588161 };
+      const good = [
+        '48.101440, 11.588161', '48.101440,11.588161', '48.101440 11.588161', '48,101440; 11,588161', '(48.101440, 11.588161)',
+        '48°06\'05.184"N 11°35\'17.380"E', '11°35\'17.380"E 48°06\'05.184"N', '48.10144° N, 11.588161° E', 'N 48.10144 E 11.588161',
+        '48°06.0864\'N 11°35.28966\'E',
+        'https://www.google.com/maps/@48.101440,11.588161,17z', 'https://www.google.com/maps?q=48.101440,11.588161',
+        'https://www.google.com/maps/place/X/@48.2,11.6,15z/data=!3m1!4b1!4m6!3m5!1s0x0:0x0!8m2!3d48.101440!4d11.588161',
+        'https://www.openstreetmap.org/#map=17/48.101440/11.588161',
+      ];
+      const bad = good.filter((t) => { const c = CoordParser.parse(t); return !c || Math.abs(c.lat - exp.lat) > 1e-5 || Math.abs(c.lon - exp.lon) > 1e-5; });
+      const south = CoordParser.parse('33°51\'35.9"S 151°12\'40.0"E'), neg = CoordParser.parse('-33.859972, -70.25');
+      const sw = CoordParser.parse('S 33.5 W 70.25'), ws = CoordParser.parse('W 70.25 S 33.5');
+      if (!sw || sw.lat !== -33.5 || sw.lon !== -70.25 || !ws || ws.lat !== -33.5 || ws.lon !== -70.25) bad.push('S 33.5 W 70.25 / W 70.25 S 33.5');
+      const rejects = ['hello', '48.1', '95.0, 11.5', '48.1, 11.5, 300', ''].filter((t) => CoordParser.parse(t) !== null);
+      const multi = CoordParser.parseLines('48.1, 11.5\nfoo\n48.2 11.6\n');
+      const pass = !bad.length && south && south.lat < -33.8 && south.lon > 151 && neg && neg.lon === -70.25 && !rejects.length && multi.points.length === 2 && multi.failed.length === 1;
+      return ok(pass, `${good.length - bad.length}/${good.length} formats ok${bad.length ? ' (failed: ' + bad.join(' | ') + ')' : ''}; south/west ${south && neg ? 'ok' : 'FAIL'}; invalid rejected ${rejects.length ? 'FAIL: ' + rejects.join(' | ') : 'ok'}; multi-line ${multi.points.length}/${multi.failed.length}`);
     } },
     { name: 'Automatic mode selection', run() {
       const r = st(0, 1000, { radius: 900 }), b = st(90, 1000, { bearing: 270 }), n = st(180, 1000);

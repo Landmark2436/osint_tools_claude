@@ -2,7 +2,7 @@
 
 Estimates the position, or the possible area, of an unknown target from known WGS84 points with measured **distances (radii)** and/or **bearings**. The result is shown on an OpenStreetMap map with an error ellipse and residuals.
 
-**Status:** beta · **Version:** 0.1.2 · **Open:** [`index.html`](index.html)
+**Status:** beta · **Version:** 0.1.3 · **Open:** [`index.html`](index.html)
 
 ## Quick start
 
@@ -38,6 +38,22 @@ When the data is insufficient, contradictory (s₀ > 3, circles that don't inter
 ### Map and table
 
 - **Map click** adds a point (toggle “Add point on map click”). **Drag** a marker to move it.
+- **Paste coordinates** (e.g. copied from Google Maps):
+  - into the “Paste coordinates” field, then Enter or **Add**
+  - anywhere on the page with Ctrl+V / ⌘V, as long as no input field is focused
+  - into a Lat or Lon cell of the table, which fills both cells
+
+  Several lines create several points; unrecognised lines are reported. Accepted formats (latitude first unless hemisphere letters say otherwise):
+
+  | Format | Example |
+  |---|---|
+  | Decimal degrees | `48.101440, 11.588161` · `48.101440 11.588161` · `48,101440; 11,588161` |
+  | Hemisphere letters | `48.1014° N, 11.5882° E` · `N 48.1014 E 11.5882` |
+  | Degrees, minutes, seconds | `48°06'05.2"N 11°35'17.4"E` |
+  | Degrees, decimal minutes | `48°06.087'N 11°35.290'E` |
+  | Google Maps link | `…/@48.101440,11.588161,17z` · `…?q=48.101440,11.588161` · place links with `!3d…!4d…` (the pin position is used) |
+  | OpenStreetMap link | `…/#map=17/48.101440/11.588161` · `…?mlat=48.101440&mlon=11.588161` |
+
 - **Table:** all values are editable. Columns: show/use (👁), name, latitude, longitude, radius (m), σ radius (m), bearing (°), σ bearing (°), delete.
 - Hidden points (👁 unchecked) are neither shown nor used.
 - Empty σ uses defaults: radius 2 % of the radius (min. 5 m), bearing 2°.
@@ -104,12 +120,13 @@ A `FeatureCollection` of `Point` (or `MultiPoint`) features. Point attributes ar
 
 ## Self-test
 
-Click **Run tests** in the “Self-test” panel. Synthetic measurements are generated from a known target, and 21 test cases check:
+Click **Run tests** in the “Self-test” panel. Synthetic measurements are generated from a known target, and 22 test cases check:
 
 - the projection
 - every mode (exact, noisy, contradictory and degenerate data: separate and nested circles, parallel rays, rays meeting behind an observer, ambiguity)
 - automatic mode selection
 - CSV/GeoJSON round trips
+- parsing of pasted coordinates (decimal, DMS, hemisphere letters, map links, invalid input)
 - LM convergence from a poor start value
 
 Each test shows passed/failed with details.
@@ -132,6 +149,11 @@ All data stays in your browser (localStorage). The only network requests are the
 | Map tiles | – | [Tile usage policy](https://operations.osmfoundation.org/policies/tiles/) | OpenStreetMap standard tiles (default); optional: OSM Humanitarian (OSM France) |
 
 ## Changelog
+
+### v0.1.3 – 2026-10-29
+
+- New: paste coordinates (e.g. from Google Maps) via a paste field, Ctrl+V anywhere on the page, or into a Lat/Lon cell. Supports decimal degrees, DMS, hemisphere letters and Google Maps / OpenStreetMap links; multiple lines add multiple points.
+- Self-test extended to 22 cases.
 
 ### v0.1.2 – 2026-10-29
 
