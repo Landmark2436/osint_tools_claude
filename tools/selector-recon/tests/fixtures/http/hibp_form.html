@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html><head><title>Have I Been Pwned (test double)</title></head>
+<body>
+<form id="f"><input type="email" id="emailInput" placeholder="email address"><button>check</button></form>
+<div id="result"></div>
+<script>
+// Simulates the rendered answer after a search; no network involved.
+document.getElementById("f").addEventListener("submit", e => {
+  e.preventDefault();
+  const v = document.getElementById("emailInput").value;
+  setTimeout(() => {
+    document.getElementById("result").textContent = v.startsWith("pwned")
+      ? "Oh no — pwned! This email address has been found in 3 data breaches"
+      : "Good news — no pwnage found!";
+  }, 200);
+});
+</script>
+</body></html>
