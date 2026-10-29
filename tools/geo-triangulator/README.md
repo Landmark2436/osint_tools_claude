@@ -133,6 +133,7 @@ All data stays in your browser (localStorage). The only network requests are the
 
 - Fix: when opened via `file://`, the map now defaults to CARTO Voyager (OpenStreetMap data), because the OSM tile server blocks requests without a Referer (“Access blocked”). Standard OSM tiles remain the default on web hosting.
 - Fix: the “No points yet” message in the empty table was cut off.
+- The version number is shown in the header.
 
 ### v0.1.0 – 2026-10-29
 

@@ -61,6 +61,7 @@ body {
 }
 .topbar h1 { font-size: 17px; margin: 0; letter-spacing: .2px; }
 .topbar .sub { color: var(--muted); font-size: 13px; }
+.topbar .version { font-size: 12px; font-weight: 600; color: var(--muted); }
 .topbar .spacer { flex: 1; }
 .layout {
   flex: 1; min-height: 0; display: grid;
@@ -173,7 +174,7 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
 </head>
 <body>
 <header class="topbar">
-  <h1>🎯 Geo Triangulator</h1>
+  <h1>🎯 Geo Triangulator <span class="version" id="appVersion"></span></h1>
   <span class="sub">Radii · Bearings · Least squares · OpenStreetMap</span>
   <span class="spacer"></span>
   <button id="btnTheme" type="button" title="Switch colour theme">Theme: Auto</button>
@@ -310,6 +311,7 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
 /* =====================================================================
  * 1. CONFIGURATION
  * ===================================================================== */
+const APP_VERSION = '0.1.1';
 const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors';
 
@@ -1538,6 +1540,7 @@ const UI = {
   },
 
   init() {
+    $('#appVersion').textContent = 'v' + APP_VERSION;
     $('#hintSigR').textContent = `${CONFIG.DEFAULT_SIGMA_R_REL * 100} % of r, min. ${CONFIG.DEFAULT_SIGMA_R_MIN_M} m`;
     $('#hintSigB').textContent = `${CONFIG.DEFAULT_SIGMA_B_DEG}°`;
     $('#modeSelect').value = State.mode;
