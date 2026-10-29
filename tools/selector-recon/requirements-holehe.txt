@@ -1,0 +1,7 @@
+# Optional, GPL-3.0: only needed for the opt-in `holehe` module (--modules +holehe).
+#   pip install -r requirements-holehe.txt
+holehe @ git+https://github.com/megadose/holehe@14da70f588538936b20d238783c5e28a0772a2b3
+trio==0.34.0
+termcolor==3.3.0
+beautifulsoup4==4.15.0
+tqdm==4.70.1
