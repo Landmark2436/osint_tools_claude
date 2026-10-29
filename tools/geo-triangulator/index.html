@@ -49,6 +49,7 @@
 
 /* ======================= Layout ======================= */
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; }
 body {
   background: var(--bg); color: var(--text);
@@ -100,6 +101,9 @@ select { padding: 6px 8px; }
 label.toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
 .muted { color: var(--muted); }
 .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+.allowed-field { margin-top: 10px; }
+.allowed-field input { font-weight: normal; padding: 6px 8px; }
+.allowed-field input.invalid { border-color: var(--err); background: var(--err-bg); }
 .paste-row { display: flex; gap: 6px; margin: 4px 0 8px; }
 .paste-row input { flex: 1; min-width: 0; padding: 6px 8px; }
 .mode-used { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--border); }
@@ -200,8 +204,13 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
           <option value="triangulation">4 · Bearings (triangulation)</option>
           <option value="mixed">5 · Mixed radii + bearings</option>
           <option value="delaunay">6 · Delaunay triangle mesh</option>
+          <option value="equalRadius">7 · Coordinates only: equal radius / allowed distance</option>
         </select>
       </label>
+      <label class="field allowed-field" id="allowedField" hidden>Allowed distance from hiding spot (m)
+        <input type="text" id="allowedDist" inputmode="decimal" placeholder="optional, e.g. 500" autocomplete="off" aria-describedby="allowedHint">
+      </label>
+      <p class="hint" id="allowedHint" hidden>Mode 7: if every point is a leaked position and the hider may be at most this far from the hiding spot, the red area shows where the hiding spot can be. Leave empty to get the smallest distance that fits all leaks.</p>
       <div class="mode-used" id="modeUsed">–</div>
     </div>
 
@@ -225,6 +234,7 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
           <option value="bearings">4 · Triangulation (3 bearings)</option>
           <option value="mixed">5 · Mixed (radii + bearing)</option>
           <option value="mesh">6 · Delaunay mesh</option>
+          <option value="equal">7 · Leaked positions (equal radius)</option>
         </select>
         <button id="btnFit" type="button" title="Zoom to all points and results">Fit map</button>
         <button id="btnClear" type="button" class="danger">Clear all</button>
@@ -299,7 +309,13 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
         <li><b>3 · Three or more radii:</b> least-squares estimate (Levenberg–Marquardt), plus the area common to all circles if there is one.</li>
         <li><b>4 · Bearings:</b> intersection of the bearing rays; with more than two bearings a least-squares adjustment. Parallel rays and rays meeting behind an observer are reported. The shaded area is the intersection of the ±2σ bearing cones.</li>
         <li><b>5 · Mixed:</b> radii and bearings in one joint, weighted adjustment. A single point with both radius and bearing already gives a position (polar fix).</li>
-        <li><b>6 · Delaunay:</b> triangle mesh of the points (no target estimate). Automatic mode uses it when points have neither radius nor bearing.</li>
+        <li><b>6 · Delaunay:</b> triangle mesh of the points (no target estimate). Select it manually.</li>
+        <li><b>7 · Coordinates only (equal radius / allowed distance):</b> no radius or bearing per point needed. Typical use: hide and seek, where the hider leaks positions now and then and may move at most a certain distance from the hiding spot.
+          <ul>
+            <li><b>Allowed distance empty:</b> the tool finds the smallest radius that, used for every point, makes all circles meet in one common point. That point (red crosshair) is the position whose largest distance to any of the points is as small as possible, and the radius is the smallest allowed distance consistent with all leaks.</li>
+            <li><b>Allowed distance entered:</b> circles of that radius around every leak; the hiding spot must lie in the red area where all of them overlap. If the leaks are farther apart than the distance allows, a warning shows the smallest distance that would fit.</li>
+          </ul>
+          Automatic mode uses this mode when no point has a radius or bearing (at least two points, or one point plus an allowed distance).</li>
       </ul>
       <h3>Reading the result</h3>
       <ul>
@@ -327,7 +343,7 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
 /* =====================================================================
  * 1. CONFIGURATION
  * ===================================================================== */
-const APP_VERSION = '0.2.0';
+const APP_VERSION = '0.3.0';
 const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors';
 
@@ -369,6 +385,7 @@ const MODE_LABELS = {
   triangulation: '4 · Triangulation (bearings)',
   mixed: '5 · Mixed radii + bearings (joint adjustment)',
   delaunay: '6 · Delaunay triangle mesh',
+  equalRadius: '7 · Coordinates only (equal radius / allowed distance)',
 };
 
 /* =====================================================================
@@ -835,6 +852,37 @@ function addAdjustmentStats(res, sol) {
   res.stats.push(['Iterations', `${a.iterations}${a.converged ? '' : ' (not converged)'}`]);
 }
 
+/**
+ * Smallest circle enclosing all plane points (Welzl's incremental algorithm,
+ * expected O(n) for random order, O(n³) worst case – fine for typical inputs).
+ * Each time a point lies outside the current circle it must lie on the
+ * boundary of the new one; the circle is rebuilt from 1, 2 or 3 boundary points.
+ * Returns {x, y, r}.
+ */
+function minEnclosingCircle(pts) {
+  const inside = (c, p) => c !== null && Math.hypot(p[0] - c.x, p[1] - c.y) <= c.r * (1 + 1e-12) + 1e-9;
+  const two = (a, b) => ({ x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2, r: Math.hypot(a[0] - b[0], a[1] - b[1]) / 2 });
+  const three = (a, b, c) => {
+    // circumcircle, relative to a:  u = (c_y·|b|² − b_y·|c|², b_x·|c|² − c_x·|b|²) / (2·(b×c))
+    const bx = b[0] - a[0], by = b[1] - a[1], cx = c[0] - a[0], cy = c[1] - a[1];
+    const b2 = bx * bx + by * by, c2 = cx * cx + cy * cy, d = 2 * (bx * cy - by * cx);
+    if (Math.abs(d) <= 1e-12 * (b2 + c2)) return [two(a, b), two(a, c), two(b, c)].sort((p, q) => q.r - p.r)[0]; // collinear
+    const ux = (cy * b2 - by * c2) / d, uy = (bx * c2 - cx * b2) / d;
+    return { x: a[0] + ux, y: a[1] + uy, r: Math.hypot(ux, uy) };
+  };
+  let c = null;
+  for (let i = 0; i < pts.length; i++) {
+    if (inside(c, pts[i])) continue;
+    c = { x: pts[i][0], y: pts[i][1], r: 0 };
+    for (let j = 0; j < i; j++) {
+      if (inside(c, pts[j])) continue;
+      c = two(pts[i], pts[j]);
+      for (let k = 0; k < j; k++) if (!inside(c, pts[k])) c = three(pts[i], pts[j], pts[k]);
+    }
+  }
+  return c;
+}
+
 /* =====================================================================
  * 2b. MODES — each one a pure function: points[] → result
  *     point = {id, name, lat, lon, radius|null, sigmaR|null, bearing|null, sigmaB|null}
@@ -1093,16 +1141,85 @@ const Modes = {
     msg(res, 'info', 'Delaunay mesh of the measurement points (no target estimate in this mode).');
     return res;
   },
+
+  /**
+   * Mode 7 — coordinates only, equal radius. The smallest radius r for which
+   * circles of radius r around all points share a common point equals the
+   * radius of the minimum enclosing circle; that common point is its centre
+   * (the point minimising the largest distance to all points).
+   * Computed with Welzl's algorithm in the local projection, then re-centred on
+   * the result until it no longer moves: distances from the projection centre
+   * are exact, so r and the centre are geodesically exact.
+   */
+  equalRadius(points, opts) {
+    const res = newResult('equalRadius');
+    const R = opts && isNum(opts.allowedDistance) && opts.allowedDistance > 0 ? opts.allowedDistance : null;
+    const seen = new Set(), uniq = [];
+    for (const p of points) {
+      const key = p.lat.toFixed(9) + ',' + p.lon.toFixed(9);
+      if (!seen.has(key)) { seen.add(key); uniq.push(p); }
+    }
+    if (uniq.length < (R ? 1 : 2)) return msg(res, 'error', R ? 'This mode needs at least one point.' : `Without an allowed distance this mode needs at least two distinct points (found ${uniq.length}).`);
+    if (points.some((p) => hasRadius(p) || hasBearing(p))) msg(res, 'info', 'Entered radii and bearings are ignored in this mode.');
+    let center = Geo.centroid(uniq);
+    for (let k = 0; k < 6; k++) {
+      const proj = Geo.makeProjection(center);
+      const mec = minEnclosingCircle(uniq.map((p) => proj.forward(p.lat, p.lon)));
+      const next = proj.inverse(mec.x, mec.y), moved = Geo.distance(center, next);
+      center = next;
+      if (moved < 1e-4) break;
+    }
+    const dists = uniq.map((p) => Geo.distance(center, p));
+    const r = Math.max(...dists), tol = Math.max(0.01, 1e-6 * r);
+    const support = uniq.length > 1 ? uniq.filter((p, i) => dists[i] >= r - tol) : [];
+    const drawR = R || r;
+    const circles = uniq.map((p) => turfCircle(p, drawR));
+    circles.forEach((f, i) => res.areas.push({ feature: f, kind: 'circle', label: `Circle around ${uniq[i].name} (r = ${Fmt.dist(drawR)})`, areaM2: Geo.capArea(drawR) }));
+    res.data = { radius: r, allowed: R, center, support: support.map((p) => p.id), distances: uniq.map((p, i) => ({ id: p.id, name: p.name, distance: dists[i], determines: support.includes(p) })) };
+    if (uniq.length > 1) res.stats.push(['Smallest distance that fits all points', Fmt.dist(r)], ['Set by', support.map((p) => p.name).join(', ')]);
+    res.stats.push(['Points', String(uniq.length)]);
+    if (uniq.length < points.length) msg(res, 'info', `${points.length - uniq.length} duplicate point(s) ignored.`);
+    const centre = (label, kind) => res.solutions.push({ label, kind, lat: center.lat, lon: center.lon, residuals: [], adjustment: null, commonRadius: r });
+
+    if (!R) {
+      centre('Common point of all circles', 'estimate');
+      msg(res, 'info', `All circles have the same radius r = ${Fmt.dist(r)}: the smallest equal radius at which all circles meet in one common point (red crosshair). No other point has a smaller largest distance to all points. With a known allowed distance, enter it above to see the possible area.`);
+      if (support.length === 2) msg(res, 'info', `The radius is set by ${support[0].name} and ${support[1].name}: the common point is their midpoint, where their circles just touch.`);
+      return res;
+    }
+
+    res.stats.unshift(['Allowed distance', Fmt.dist(R)]);
+    if (R < r - tol) {
+      centre('Best compromise (fits the smallest possible distance)', 'deviation');
+      return msg(res, 'warning', `Contradiction: no point lies within ${Fmt.dist(R)} of all positions – the circles have no common area. The smallest distance that fits all positions is ${Fmt.dist(r)}. Check the positions (e.g. a leak from a different round) or the allowed distance.`);
+    }
+    const common = intersectAll(circles);
+    centre(uniq.length > 1 ? 'Most central point' : 'Leaked position', 'estimate');
+    if (common) {
+      const a = turf.area(common);
+      res.areas.push({ feature: common, kind: 'area', label: 'Possible hiding area', areaM2: a });
+      res.stats.push(['Possible hiding area', Fmt.area(a)]);
+      res.data.area = common;
+      msg(res, 'info', uniq.length > 1
+        ? `The hiding spot lies in the red area: within ${Fmt.dist(R)} of every position. The crosshair marks its most central point (the only spot that would still fit if the hider had used just ${Fmt.dist(r)}).`
+        : `The hiding spot lies within ${Fmt.dist(R)} of the leaked position (red area). Add further leaks to narrow it down.`);
+    } else {
+      msg(res, 'info', `The allowed distance is just enough: the possible area shrinks to the crosshair point.`);
+    }
+    return res;
+  },
 };
 
 /** Automatic mode selection from the available data. */
-function autoSelect(points) {
+function autoSelect(points, opts) {
+  const allowed = opts && isNum(opts.allowedDistance) && opts.allowedDistance > 0;
   const nR = points.filter(hasRadius).length, nB = points.filter(hasBearing).length;
   if (!points.length) return { mode: null, reason: 'No usable points yet. Click on the map or add a row.' };
   if (!nR && !nB) {
-    return points.length >= 3
-      ? { mode: 'delaunay', reason: 'no radii or bearings entered → triangle mesh of the points' }
-      : { mode: null, reason: 'Enter a radius and/or a bearing for at least one point.' };
+    if (points.length >= 2 || allowed) {
+      return { mode: 'equalRadius', reason: allowed ? 'coordinates only + allowed distance → possible hiding area' : 'coordinates only → equal radius determined automatically' };
+    }
+    return { mode: null, reason: 'Enter a radius and/or a bearing, add a second point, or enter an allowed distance.' };
   }
   if (!nB) {
     if (nR === 1) return { mode: 'circle', reason: 'one radius' };
@@ -1116,10 +1233,10 @@ function autoSelect(points) {
   return { mode: 'mixed', reason: `${nR} radius / ${nB} bearing measurement(s)` };
 }
 
-function runMode(mode, points) {
+function runMode(mode, points, opts) {
   const fn = Modes[mode];
   if (!fn) return msg(newResult(mode), 'error', 'Unknown mode.');
-  try { return fn(points); }
+  try { return fn(points, opts || {}); }
   catch (e) { console.error(e); return msg(newResult(mode), 'error', 'Calculation failed: ' + (e && e.message ? e.message : e)); }
 }
 
@@ -1147,6 +1264,7 @@ const State = {
   points: [],      // {id, name, lat, lon, radius, sigmaR, bearing, sigmaB, visible}
   mode: 'auto',
   clickAdd: true,
+  allowedDist: '',  // mode 7: allowed distance from the hiding spot (string as typed)
   theme: 'auto',
   baseLayers: {},  // explicit base map choice per context: {file: name, web: name}
   nextId: 1,
@@ -1167,7 +1285,7 @@ const State = {
   save() {
     try {
       localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify({
-        v: 1, points: this.points, mode: this.mode, clickAdd: this.clickAdd, theme: this.theme, baseLayers: this.baseLayers, nextId: this.nextId,
+        v: 1, points: this.points, mode: this.mode, clickAdd: this.clickAdd, allowedDist: this.allowedDist, theme: this.theme, baseLayers: this.baseLayers, nextId: this.nextId,
       }));
     } catch (e) { /* storage unavailable (private mode, file:// restrictions) – ignore */ }
   },
@@ -1185,6 +1303,7 @@ const State = {
       this.nextId = Math.max(Number(s.nextId) || 1, ...this.points.map((p) => p.id + 1), 1);
       if (MODE_LABELS[s.mode]) this.mode = s.mode;
       if (typeof s.clickAdd === 'boolean') this.clickAdd = s.clickAdd;
+      if (typeof s.allowedDist === 'string') this.allowedDist = s.allowedDist;
       if (['auto', 'light', 'dark'].includes(s.theme)) this.theme = s.theme;
       if (s.baseLayers && typeof s.baseLayers === 'object') this.baseLayers = s.baseLayers;
       return true;
@@ -1408,10 +1527,11 @@ const IO = {
       features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [s.lon, s.lat] }, properties: Object.assign({
         role: s.kind, label: s.label, lat: s.lat, lon: s.lon,
         s0: s.adjustment ? s.adjustment.s0 : null,
+        common_radius_m: s.commonRadius === undefined ? null : s.commonRadius,
         residuals: s.residuals.map((r) => ({ point: r.name, type: r.type, observed: r.observed, computed: r.computed, residual: r.residual, unit: r.unit })),
       }, meta) });
     }
-    for (const a of result.areas) features.push({ type: 'Feature', geometry: a.feature.geometry, properties: Object.assign({ role: a.kind === 'mesh' ? 'triangle' : 'area', label: a.label, area_m2: a.areaM2 }, meta) });
+    for (const a of result.areas) features.push({ type: 'Feature', geometry: a.feature.geometry, properties: Object.assign({ role: a.kind === 'mesh' ? 'triangle' : a.kind === 'circle' ? 'equal_radius_circle' : 'area', label: a.label, area_m2: a.areaM2 }, meta) });
     for (const p of activePoints) features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [p.lon, p.lat] }, properties: { role: 'measurement_point', name: p.name, radius_m: p.radius, sigma_radius_m: p.sigmaR, bearing_deg: p.bearing, sigma_bearing_deg: p.sigmaB } });
     return { type: 'FeatureCollection', features };
   },
@@ -1549,8 +1669,8 @@ const MapView = {
     this.resultLayer.clearLayers();
     if (!result) return;
     for (const a of result.areas) {
-      const style = a.kind === 'mesh'
-        ? { color: '#7048e8', weight: 1.5, fillColor: '#7048e8', fillOpacity: 0.08 }
+      const style = a.kind === 'mesh' ? { color: '#7048e8', weight: 1.5, fillColor: '#7048e8', fillOpacity: 0.08 }
+        : a.kind === 'circle' ? { color: '#1c64d6', weight: 2, dashArray: '6 5', fillColor: '#1c64d6', fillOpacity: 0.06 }
         : { color: '#e03131', weight: 2, fillColor: '#ff6b6b', fillOpacity: 0.28 };
       L.geoJSON(a.feature, { style }).bindTooltip(`${UI.esc(a.label)}<br>${Fmt.area(a.areaM2)}`, { sticky: true }).addTo(this.resultLayer);
     }
@@ -1594,6 +1714,8 @@ const UI = {
     this.applyTheme();
 
     $('#modeSelect').addEventListener('change', (e) => { State.mode = e.target.value; scheduleRecalc(0); });
+    $('#allowedDist').value = State.allowedDist;
+    $('#allowedDist').addEventListener('input', (e) => { State.allowedDist = e.target.value; scheduleRecalc(); });
     $('#clickAdd').addEventListener('change', (e) => { State.clickAdd = e.target.checked; State.save(); });
     $('#btnTheme').addEventListener('click', () => {
       State.theme = { auto: 'light', light: 'dark', dark: 'auto' }[State.theme];
@@ -1619,7 +1741,7 @@ const UI = {
       if (State.points.length && !confirm('Replace the current points with the example?')) return;
       State.clear();
       Examples.make(kind).forEach((p) => State.add(p));
-      State.mode = 'auto'; $('#modeSelect').value = 'auto';
+      State.mode = kind === 'mesh' ? 'delaunay' : 'auto'; $('#modeSelect').value = State.mode;
       this.renderTable(); recalc(); MapView.fit(false);
     });
 
@@ -1848,7 +1970,11 @@ const UI = {
     $('#stats').innerHTML = (result ? result.stats : []).map(([k, v]) => `<dt>${this.esc(k)}</dt><dd>${this.esc(v)}</dd>`).join('');
 
     const primary = sols[0];
-    if (primary && primary.residuals.length) {
+    if (result && result.mode === 'equalRadius' && result.data.distances) {
+      const rows = result.data.distances.map((d) => `<tr><td>${this.esc(d.name)}</td><td class="num">${Fmt.dist(d.distance)}</td><td>${d.determines ? '✓ on the radius' : ''}</td></tr>`).join('');
+      $('#residuals').innerHTML = `<div class="muted" style="font-size:12px;margin:4px 0">Distance from the ${result.data.allowed ? 'most central point' : 'common point'} to each point (smallest fitting distance ${Fmt.dist(result.data.radius)}${result.data.allowed ? `, allowed ${Fmt.dist(result.data.allowed)}` : ''}):</div>
+        <div class="table-wrap"><table class="res"><thead><tr><th>Point</th><th>Distance</th><th>Sets the radius</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    } else if (primary && primary.residuals.length) {
       const rows = primary.residuals.map((r) => {
         const d = r.unit === 'm' ? 2 : 3, flag = Math.abs(r.norm) > CONFIG.OUTLIER_NORM;
         return `<tr><td>${this.esc(r.name)}</td><td>${r.type}</td>
@@ -1889,11 +2015,19 @@ function recalc() {
     if (pp.visible && pp.errors.length) rowMessages.push({ level: pp.ok ? 'warning' : 'error', text: `Row ${pp.index + 1} (${pp.value.name}): ${pp.errors.join('; ')}${pp.ok ? ' – value ignored.' : ' – point ignored.'}` });
   });
   const active = parsed.filter((pp) => pp.ok && pp.visible).map((pp) => pp.value);
+  // Allowed distance (mode 7): shown when mode 7 is selected or automatic mode may pick it
+  const allowedRaw = parseNumber(State.allowedDist);
+  const allowedBad = allowedRaw !== null && !(allowedRaw > 0);
+  const opts = { allowedDistance: allowedRaw > 0 ? allowedRaw : null };
+  const showAllowed = State.mode === 'equalRadius' || (State.mode === 'auto' && !active.some((p) => hasRadius(p) || hasBearing(p)));
+  $('#allowedField').hidden = !showAllowed; $('#allowedHint').hidden = !showAllowed;
+  $('#allowedDist').classList.toggle('invalid', allowedBad);
+  if (showAllowed && allowedBad) rowMessages.push({ level: 'warning', text: 'Allowed distance must be a positive number of metres – value ignored.' });
   let sel;
-  if (State.mode === 'auto') sel = Object.assign({ auto: true }, autoSelect(active));
+  if (State.mode === 'auto') sel = Object.assign({ auto: true }, autoSelect(active, opts));
   else sel = { auto: false, mode: State.mode, reason: 'selected manually' };
   if (!active.length && !sel.auto) sel = { auto: false, mode: null, reason: 'No usable points yet. Click on the map or add a row.' };
-  const result = sel.mode ? runMode(sel.mode, active) : null;
+  const result = sel.mode ? runMode(sel.mode, active, opts) : null;
   State.lastResult = result; State.lastSelection = sel; State.lastActive = active;
   MapView.syncMarkers(parsed);
   MapView.drawObservations(active, result);
@@ -1929,6 +2063,10 @@ const Examples = {
       case 'mesh': {
         const qs = [[0, 0], [20, 1500], [80, 2200], [140, 1800], [200, 2500], [260, 1700], [320, 2100], [110, 3600]];
         return qs.map(([b, d], i) => pt('M' + (i + 1), d ? st(b, d) : T));
+      }
+      case 'equal': {
+        const qs = [[15, 2400], [100, 1900], [190, 2600], [255, 1500], [310, 2200], [60, 900]];
+        return qs.map(([b, d], i) => pt('C' + (i + 1), st(b, d)));
       }
       default: return [];
     }
@@ -2070,10 +2208,40 @@ const Tests = (() => {
       const pass = !bad.length && south && south.lat < -33.8 && south.lon > 151 && neg && neg.lon === -70.25 && !rejects.length && multi.points.length === 2 && multi.failed.length === 1;
       return ok(pass, `${good.length - bad.length}/${good.length} formats ok${bad.length ? ' (failed: ' + bad.join(' | ') + ')' : ''}; south/west ${south && neg ? 'ok' : 'FAIL'}; invalid rejected ${rejects.length ? 'FAIL: ' + rejects.join(' | ') : 'ok'}; multi-line ${multi.points.length}/${multi.failed.length}`);
     } },
+    { name: 'Mode 7: equal radius (equilateral, two points, obtuse triangle)', run() {
+      const a = Modes.equalRadius([st(0, 2000), st(120, 2000), st(240, 2000)]);
+      const b = Modes.equalRadius([st(270, 1500), st(90, 1500)]);
+      const c = Modes.equalRadius([st(270, 2000), st(90, 2000), st(0, 300)]); // obtuse: centre = midpoint of the long side
+      const ea = err(best(a)), eb = err(best(b)), ec = err(best(c));
+      const pass = ea < 0.01 && near(a.data.radius, 2000, 0.01) && a.data.support.length === 3
+        && eb < 0.01 && near(b.data.radius, 1500, 0.01) && b.data.support.length === 2
+        && ec < 0.01 && near(c.data.radius, 2000, 0.01) && c.data.support.length === 2 && a.areas.length === 3;
+      return ok(pass, `equilateral: ${ea.toFixed(4)} m off, r = ${a.data.radius.toFixed(3)} m; two points: ${eb.toFixed(4)} m off; obtuse: ${ec.toFixed(4)} m off, set by ${c.data.support.length} points`);
+    } },
+    { name: 'Mode 7: equal radius at 30 km scale with interior points; too few points', run() {
+      const pts = [st(0, 30000), st(120, 30000), st(240, 30000), st(45, 5000), P(T0), st(200, 12000)];
+      const r = Modes.equalRadius(pts), e = err(best(r));
+      const one = Modes.equalRadius([st(0, 100)]);
+      const maxD = Math.max(...pts.map((p) => Geo.distance(best(r), p)));
+      return ok(e < 0.05 && near(r.data.radius, 30000, 0.05) && near(maxD, r.data.radius, 1e-6) && one.status === 'error',
+        `centre ${e.toFixed(4)} m off, r = ${r.data.radius.toFixed(3)} m; single point → ${one.status}`);
+    } },
+    { name: 'Mode 7: hide & seek with allowed distance (area contains spot; contradiction detected)', run() {
+      // hiding spot T0; leaks within 1000 m of it
+      const leaks = [st(0, 1000), st(130, 800), st(250, 950), st(60, 400)];
+      const a = Modes.equalRadius(leaks, { allowedDistance: 1000 });
+      const inside = a.data.area && turf.booleanPointInPolygon(turf.point([T0.lon, T0.lat]), a.data.area);
+      const b = Modes.equalRadius(leaks, { allowedDistance: 400 });
+      const one = Modes.equalRadius([st(0, 300)], { allowedDistance: 500 });
+      const oneInside = one.data.area && turf.booleanPointInPolygon(turf.point([T0.lon, T0.lat]), one.data.area);
+      return ok(inside && a.status === 'ok' && b.status === 'warning' && b.solutions[0].kind === 'deviation' && oneInside,
+        `R = 1000 m: spot inside area ${inside ? 'yes' : 'NO'} (${a.data.area ? Fmt.area(turf.area(a.data.area)) : '–'}); R = 400 m: ${b.status} (needs ≥ ${Fmt.dist(b.data.radius)}); single leak: ${oneInside ? 'ok' : 'FAIL'}`);
+    } },
     { name: 'Automatic mode selection', run() {
       const r = st(0, 1000, { radius: 900 }), b = st(90, 1000, { bearing: 270 }), n = st(180, 1000);
-      const cases = [[[r], 'circle'], [[r, r], 'twoCircles'], [[r, r, r], 'trilateration'], [[b, b], 'triangulation'], [[r, b], 'mixed'], [[n, n, n], 'delaunay'], [[b], null], [[], null]];
+      const cases = [[[r], 'circle'], [[r, r], 'twoCircles'], [[r, r, r], 'trilateration'], [[b, b], 'triangulation'], [[r, b], 'mixed'], [[n, n, n], 'equalRadius'], [[n, n], 'equalRadius'], [[n], null], [[b], null], [[], null]];
       const bad = cases.filter(([pts, m]) => autoSelect(pts).mode !== m);
+      if (autoSelect([n], { allowedDistance: 500 }).mode !== 'equalRadius') bad.push([[], 'one point + allowed distance']);
       return ok(!bad.length, bad.length ? `wrong for: ${bad.map((c) => c[1]).join(', ')}` : `${cases.length} cases correct`);
     } },
     { name: 'CSV and GeoJSON round trip, decimal comma import', run() {

@@ -1,8 +1,10 @@
 # Geo Triangulator
 
-Estimates the position, or the possible area, of an unknown target from known WGS84 points with measured **distances (radii)** and/or **bearings**. The result is shown on an OpenStreetMap map together with the residuals of every measurement.
+Estimates the position, or the possible area, of an unknown target from known WGS84 points with measured **distances (radii)** and/or **bearings**, or from **coordinates alone**. The result is shown on an OpenStreetMap map together with the residuals of every measurement.
 
-**Status:** beta · **Version:** 0.2.0 · **Open:** [`index.html`](index.html)
+Typical use: location games such as hide and seek, where the hider leaks a position every now and then and may only move a limited distance from the hiding spot (mode 7).
+
+**Status:** beta · **Version:** 0.3.0 · **Open:** [`index.html`](index.html)
 
 ## Quick start
 
@@ -27,9 +29,19 @@ An internet connection is required for the CDN libraries (Leaflet, Turf.js) and 
 | 3 · Trilateration | ≥ 3 points with radius | Least-squares estimate, plus the area common to all circles (if one exists) |
 | 4 · Triangulation | ≥ 2 points with bearing | Intersection of the bearing rays (least squares for > 2); parallel rays and intersections behind an observer are reported; intersection of the ±2σ bearing cones |
 | 5 · Mixed | ≥ 2 measurements in total (radii + bearings) | Joint weighted adjustment; one point with radius **and** bearing already gives a position (polar fix) |
-| 6 · Delaunay | ≥ 3 distinct points | Triangle mesh of the points (no target estimate) |
+| 6 · Delaunay | ≥ 3 distinct points | Triangle mesh of the points (no target estimate); select manually |
+| 7 · Coordinates only | ≥ 2 points, or 1 point + allowed distance; no radius/bearing needed | Without allowed distance: the smallest equal radius at which the circles around all points meet in one point, and that point. With allowed distance R: the possible hiding area (overlap of all R-circles), or a warning if the points are too far apart for R |
 
-Automatic selection: radii only → mode 1/2/3 by count; bearings only → mode 4 (≥ 2 bearings); both → mode 5; neither but ≥ 3 points → mode 6.
+Automatic selection: radii only → mode 1/2/3 by count; bearings only → mode 4 (≥ 2 bearings); both → mode 5; neither → mode 7 (≥ 2 points, or 1 point with an allowed distance). Mode 6 is only used when selected.
+
+### Mode 7 in hide and seek
+
+Enter every leaked position as a point (paste or click; no radius needed).
+
+- **Allowed distance known** (e.g. the rule “stay within 500 m of your hiding spot”): enter it in the field **Allowed distance from hiding spot** below the mode selector. The hiding spot must be within that distance of *every* leak, so it lies where all circles overlap (red area). Each new leak can only make the area smaller. If no overlap exists, the leaks contradict the rule. The warning then shows the smallest distance that would fit.
+- **Allowed distance unknown:** leave the field empty. The tool shows the smallest distance that fits all leaks (a lower bound for the hider's actual allowance) and the only spot that works with it: the point whose largest distance to all leaks is as small as possible (centre of the smallest circle enclosing all leaks).
+
+The field is stored with your other inputs and only appears when mode 7 is selected or automatic mode could choose it.
 
 When the data is insufficient, contradictory (s₀ > 3, circles that don't intersect, rays that meet behind an observer) or ambiguous (two equally good positions), the tool says so in the result panel.
 
@@ -107,6 +119,7 @@ A `FeatureCollection` of `Point` (or `MultiPoint`) features. Point attributes ar
 - **Least squares:** a self-written Levenberg–Marquardt solver minimises Σ(v/σ)² over the two unknowns (east, north). Radius model: ‖X − Pᵢ‖. Bearing model: atan2(Δx, Δy). Start values come from closed-form constructions: linearised trilateration, pairwise circle/circle, ray/ray and ray/circle intersections, and polar fixes. Several starts are tried, so ambiguous geometries return all equally good solutions.
 - **Weights:** each measurement is weighted with 1/σ², so precise measurements count more. σ also makes radii (metres) and bearings (degrees) comparable in mixed mode. s₀ = √(vᵀWv / redundancy) shows whether the measurements agree with their σ.
 - **Mode 2 closed form:** circle intersection a = (r₁² − r₂² + d²)/2d, h = √(r₁² − a²). If the circles don't meet, the point of least weighted deviation lies on the centre line.
+- **Mode 7:** smallest enclosing circle of the points (Welzl's algorithm) in the local projection, re-centred on its centre until stable. Distances from the projection centre are exact, so the radius is geodesically exact. Its radius is the smallest R for which all R-circles share a point.
 - **Areas** (circles, intersections, bearing cones, Delaunay via `turf.tin`) are computed with Turf.js on geodesic polygons.
 
 ## Limitations
@@ -119,10 +132,10 @@ A `FeatureCollection` of `Point` (or `MultiPoint`) features. Point attributes ar
 
 ## Self-test
 
-Click **Run tests** in the “Self-test” panel. Synthetic measurements are generated from a known target, and 22 test cases check:
+Click **Run tests** in the “Self-test” panel. Synthetic measurements are generated from a known target, and 25 test cases check:
 
 - the projection
-- every mode (exact, noisy, contradictory and degenerate data: separate and nested circles, parallel rays, rays meeting behind an observer, ambiguity)
+- every mode (exact, noisy, contradictory and degenerate data: separate and nested circles, parallel rays, rays meeting behind an observer, ambiguity; mode 7 with equilateral/obtuse configurations, 30 km scale, allowed distance and contradiction)
 - automatic mode selection
 - CSV/GeoJSON round trips
 - parsing of pasted coordinates (decimal, DMS, hemisphere letters, map links, invalid input)
@@ -148,6 +161,12 @@ All data stays in your browser (localStorage). The only network requests are the
 | Map tiles | – | [Tile usage policy](https://operations.osmfoundation.org/policies/tiles/) | OpenStreetMap standard tiles (default); optional: OSM Humanitarian (OSM France) |
 
 ## Changelog
+
+### v0.3.0 – 2026-10-29
+
+- New mode 7 “Coordinates only”: without radii or bearings, the smallest equal radius at which all circles meet and the common point (minimum enclosing circle). Optional **allowed distance** turns it into a hide-and-seek search: the possible hiding area is the overlap of all circles, and contradictions are reported.
+- Automatic mode now picks mode 7 for points without radius/bearing. The Delaunay mesh (mode 6) is used only when selected.
+- New example “Leaked positions”. Self-test extended to 25 cases.
 
 ### v0.2.0 – 2026-10-29
 
