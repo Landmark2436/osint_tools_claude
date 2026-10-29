@@ -1,0 +1,3 @@
+{"result":{"resource":{"ip":"8.8.8.8","services":[{"port":53,"protocol":"DNS","transport_protocol":"udp"},{"port":443,"protocol":"HTTP","transport_protocol":"tcp"}],
+ "autonomous_system":{"asn":15169,"name":"EXAMPLE-AS"},"location":{"country":"United States","city":"Mountain View"},
+ "dns":{"names":["dns.example"],"reverse_dns":{"names":["dns.example","dns2.example"]}}}}}

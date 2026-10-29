@@ -1,0 +1,2 @@
+{"ip_str":"8.8.8.8","ports":[53,443],"hostnames":["dns.example"],"domains":["example"],"org":"Example Org","isp":"Example ISP","asn":"AS15169",
+ "country_name":"United States","city":"Mountain View","last_update":"2026-10-01T00:00:00","tags":[],"vulns":{"CVE-2020-0001":{}}}

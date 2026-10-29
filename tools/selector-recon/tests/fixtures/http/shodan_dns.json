@@ -1,0 +1,1 @@
+{"domain":"example.com","tags":["ipv6"],"subdomains":["www","mail",""],"data":[{"subdomain":"www","type":"A","value":"192.0.2.10","last_seen":"2026-10-01T00:00:00"}]}
