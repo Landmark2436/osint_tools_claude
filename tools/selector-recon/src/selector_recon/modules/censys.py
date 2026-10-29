@@ -44,7 +44,8 @@ class Censys(Module):
     selector_types = frozenset({SelectorType.IP})
     needs_key = "CENSYS_API_TOKEN"
     key_required = True
-    description = "IP: services, ASN, location and DNS names from the Censys Platform API (needs CENSYS_API_TOKEN)."
+    default_enabled = False
+    description = "Opt-in, needs CENSYS_API_TOKEN, may use credits: services, ASN, location and DNS names for an IP."
     homepage = "https://docs.censys.com/"
     license = "API"
     tos = "Censys ToS; host lookups may consume credits depending on plan."
