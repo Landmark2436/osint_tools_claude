@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Geo Triangulator</title>
-<meta name="description" content="Estimate the position or possible area of an unknown target from distances (radii) and bearings measured at known WGS84 points.">
+<meta name="description" content="Estimate the position or possible area of an unknown target from distances (radii) measured at known WGS84 points, or from leaked positions.">
 <meta name="color-scheme" content="light dark">
 
 <!-- Library load bookkeeping: lets the app show a clear error instead of a blank page. -->
@@ -184,7 +184,7 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
 <body>
 <header class="topbar">
   <h1>🎯 Geo Triangulator <span class="version" id="appVersion"></span></h1>
-  <span class="sub">Radii · Bearings · Least squares · OpenStreetMap</span>
+  <span class="sub">Radii · Leaked positions · Least squares · OpenStreetMap</span>
   <span class="spacer"></span>
   <button id="btnTheme" type="button" title="Switch colour theme">Theme: Auto</button>
 </header>
@@ -201,16 +201,14 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
           <option value="circle">1 · One point with radius (circle)</option>
           <option value="twoCircles">2 · Two radii (intersection lens)</option>
           <option value="trilateration">3 · Three or more radii (trilateration)</option>
-          <option value="triangulation">4 · Bearings (triangulation)</option>
-          <option value="mixed">5 · Mixed radii + bearings</option>
-          <option value="delaunay">6 · Delaunay triangle mesh</option>
-          <option value="equalRadius">7 · Coordinates only: equal radius / allowed distance</option>
+          <option value="equalRadius">4 · Coordinates only: equal radius / allowed distance</option>
+          <option value="delaunay">5 · Delaunay triangle mesh</option>
         </select>
       </label>
       <label class="field allowed-field" id="allowedField" hidden>Allowed distance from hiding spot (m)
         <input type="text" id="allowedDist" inputmode="decimal" placeholder="optional, e.g. 500" autocomplete="off" aria-describedby="allowedHint">
       </label>
-      <p class="hint" id="allowedHint" hidden>Mode 7: if every point is a leaked position and the hider may be at most this far from the hiding spot, the red area shows where the hiding spot can be. Leave empty to get the smallest distance that fits all leaks.</p>
+      <p class="hint" id="allowedHint" hidden>Mode 4: if every point is a leaked position and the hider may be at most this far from the hiding spot, the red area shows where the hiding spot can be. Leave empty to get the smallest distance that fits all leaks.</p>
       <div class="mode-used" id="modeUsed">–</div>
     </div>
 
@@ -231,10 +229,8 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
           <option value="circle">1 · One circle</option>
           <option value="two">2 · Two circles</option>
           <option value="tri">3 · Trilateration (4 radii)</option>
-          <option value="bearings">4 · Triangulation (3 bearings)</option>
-          <option value="mixed">5 · Mixed (radii + bearing)</option>
-          <option value="mesh">6 · Delaunay mesh</option>
-          <option value="equal">7 · Leaked positions (equal radius)</option>
+          <option value="equal">4 · Leaked positions (equal radius)</option>
+          <option value="mesh">5 · Delaunay mesh</option>
         </select>
         <button id="btnFit" type="button" title="Zoom to all points and results">Fit map</button>
         <button id="btnClear" type="button" class="danger">Clear all</button>
@@ -249,14 +245,12 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
             <th>Lon (°)</th>
             <th title="Measured distance from this point to the target, in metres">Radius (m)</th>
             <th title="Standard deviation of the radius in metres (optional)">σ r (m)</th>
-            <th title="Bearing from this point towards the target, degrees clockwise from true north">Bearing (°)</th>
-            <th title="Standard deviation of the bearing in degrees (optional)">σ b (°)</th>
             <th></th>
           </tr></thead>
           <tbody id="pointsBody"></tbody>
         </table>
       </div>
-      <p class="hint">Drag markers to move points. Empty σ → defaults (radius: <span id="hintSigR"></span>, bearing: <span id="hintSigB"></span>). Hidden points are ignored.</p>
+      <p class="hint">Drag markers to move points. Empty σ → default <span id="hintSigR"></span>. Hidden points are ignored.</p>
       <div class="toolbar">
         <button id="btnImport" type="button">Import CSV / GeoJSON</button>
         <input type="file" id="fileInput" accept=".csv,.txt,.geojson,.json,text/csv,application/geo+json,application/json" hidden>
@@ -290,8 +284,8 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
       <h3>Quick start</h3>
       <ol>
         <li>Add measurement points: click on the map (toggle “Add point on map click”), paste coordinates, use “+ Add row”, import a file, or load an example.</li>
-        <li>For each point enter a <b>radius</b> (distance to the target in metres) and/or a <b>bearing</b> (direction to the target in degrees, clockwise from true north, 0 = north, 90 = east).</li>
-        <li>Optionally enter uncertainties (σ = one standard deviation). They weight the measurements in the adjustment.</li>
+        <li>If you know the distance from a point to the target, enter it as <b>radius</b> (metres). For leaked positions without distances, leave the radius empty (mode 4).</li>
+        <li>Optionally enter the uncertainty of a radius (σ = one standard deviation). It weights the radii against each other.</li>
         <li>The result updates automatically. In “Automatic” mode the app picks the matching method and shows which one it used.</li>
       </ol>
       <h3>Pasting coordinates</h3>
@@ -307,15 +301,18 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
         <li><b>1 · One radius:</b> the target lies inside (or on) the circle. Area and circumference are shown. One circle cannot fix a position.</li>
         <li><b>2 · Two radii:</b> the lens-shaped intersection area and the two intersection points (the target is at one of them if the radii are exact distances). If the circles don’t meet, the point of least weighted deviation is shown.</li>
         <li><b>3 · Three or more radii:</b> least-squares estimate (Levenberg–Marquardt), plus the area common to all circles if there is one.</li>
-        <li><b>4 · Bearings:</b> intersection of the bearing rays; with more than two bearings a least-squares adjustment. Parallel rays and rays meeting behind an observer are reported. The shaded area is the intersection of the ±2σ bearing cones.</li>
-        <li><b>5 · Mixed:</b> radii and bearings in one joint, weighted adjustment. A single point with both radius and bearing already gives a position (polar fix).</li>
-        <li><b>6 · Delaunay:</b> triangle mesh of the points (no target estimate). Select it manually.</li>
-        <li><b>7 · Coordinates only (equal radius / allowed distance):</b> no radius or bearing per point needed. Typical use: hide and seek, where the hider leaks positions now and then and may move at most a certain distance from the hiding spot.
+        <li><b>4 · Coordinates only (equal radius / allowed distance):</b> no radius per point needed. Typical use: hide and seek, where the hider leaks positions now and then and may move at most a certain distance from the hiding spot.
           <ul>
             <li><b>Allowed distance empty:</b> the tool finds the smallest radius that, used for every point, makes all circles meet in one common point. That point (red crosshair) is the position whose largest distance to any of the points is as small as possible, and the radius is the smallest allowed distance consistent with all leaks.</li>
             <li><b>Allowed distance entered:</b> circles of that radius around every leak; the hiding spot must lie in the red area where all of them overlap. If the leaks are farther apart than the distance allows, a warning shows the smallest distance that would fit.</li>
           </ul>
-          Automatic mode uses this mode when no point has a radius or bearing (at least two points, or one point plus an allowed distance).</li>
+          Automatic mode uses this mode when no point has a radius (at least two points, or one point plus an allowed distance).</li>
+        <li><b>5 · Delaunay triangle mesh:</b> connects all points into triangles (no target estimate; select it manually). Among all ways to connect the points, Delaunay picks the one with the “fattest” triangles: no point lies inside the circle through the corners of any triangle, so long thin triangles are avoided. Each point is linked to its natural neighbours.
+          <ul>
+            <li>The outer edge of the mesh is the convex hull: the smallest region without dents that contains all points. “Total area” is its size, i.e. how large an area the points span.</li>
+            <li>Long edges and large triangles show gaps where there are no points; short edges show clusters.</li>
+            <li>Use it to see how points (e.g. leaked positions) are spread out and which ones are neighbours. Hover over a triangle to see its area.</li>
+          </ul></li>
       </ul>
       <h3>Reading the result</h3>
       <ul>
@@ -324,7 +321,7 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
         <li><b>Residuals</b> are “computed − observed”, evaluated on the sphere. |v/σ| &gt; 3 is flagged in red as a likely outlier.</li>
       </ul>
       <h3>Files</h3>
-      <p>CSV with a header line, separated by <code>,</code> <code>;</code> or tab: <code>name,lat,lon,radius_m,sigma_radius_m,bearing_deg,sigma_bearing_deg,visible</code>. Common alternatives (<code>latitude</code>, <code>lng</code>, <code>distance</code>, <code>azimuth</code>…) are recognised; empty cells are allowed. With <code>;</code> as separator a decimal comma is accepted.<br>
+      <p>CSV with a header line, separated by <code>,</code> <code>;</code> or tab: <code>name,lat,lon,radius_m,sigma_radius_m,visible</code>. Common alternatives (<code>latitude</code>, <code>lng</code>, <code>distance</code>…) are recognised; other columns are ignored; empty cells are allowed. With <code>;</code> as separator a decimal comma is accepted.<br>
       GeoJSON: Point features; the same names are read from <code>properties</code>.</p>
       <h3>Notes &amp; limits</h3>
       <ul>
@@ -343,7 +340,7 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
 /* =====================================================================
  * 1. CONFIGURATION
  * ===================================================================== */
-const APP_VERSION = '0.3.0';
+const APP_VERSION = '0.4.0';
 const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors';
 
@@ -364,10 +361,6 @@ const CONFIG = {
   DEFAULT_VIEW: { lat: 48.1374, lon: 11.5755, zoom: 5 },
   DEFAULT_SIGMA_R_REL: 0.02,          // default radius σ = 2 % of the radius …
   DEFAULT_SIGMA_R_MIN_M: 5,           // … but at least 5 m
-  DEFAULT_SIGMA_B_DEG: 2,             // default bearing σ in degrees
-  PARALLEL_LIMIT_DEG: 1,              // bearing lines crossing at less than this count as parallel
-  POOR_GEOMETRY_DEG: 15,              // crossing angles below this give a "poor geometry" notice
-  WEDGE_K: 2,                         // bearing cone half-width = WEDGE_K · σ
   LM_MAX_ITER: 200,
   LM_TOL_M: 1e-7,                     // stop when the step is shorter than this (metres)
   MAX_STARTS: 8,                      // number of start values tried in the adjustment
@@ -382,10 +375,8 @@ const MODE_LABELS = {
   circle: '1 · One radius (circle)',
   twoCircles: '2 · Two radii (intersection lens)',
   trilateration: '3 · Trilateration (least squares)',
-  triangulation: '4 · Triangulation (bearings)',
-  mixed: '5 · Mixed radii + bearings (joint adjustment)',
-  delaunay: '6 · Delaunay triangle mesh',
-  equalRadius: '7 · Coordinates only (equal radius / allowed distance)',
+  equalRadius: '4 · Coordinates only (equal radius / allowed distance)',
+  delaunay: '5 · Delaunay triangle mesh',
 };
 
 /* =====================================================================
@@ -394,7 +385,6 @@ const MODE_LABELS = {
 const D2R = Math.PI / 180, R2D = 180 / Math.PI;
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const hasRadius = (p) => isNum(p.radius) && p.radius > 0;
-const hasBearing = (p) => isNum(p.bearing);
 
 /**
  * Spherical earth helpers. All angles in degrees at the interface, metres for distances.
@@ -411,25 +401,12 @@ const Geo = {
     const h = Math.sin(df / 2) ** 2 + Math.cos(f1) * Math.cos(f2) * Math.sin(dl / 2) ** 2;
     return 2 * Geo.R * Math.atan2(Math.sqrt(h), Math.sqrt(Math.max(0, 1 - h)));
   },
-  /** Initial great-circle bearing from a to b, degrees clockwise from north [0, 360). */
-  bearing(a, b) {
-    const f1 = a.lat * D2R, f2 = b.lat * D2R, dl = (b.lon - a.lon) * D2R;
-    const y = Math.sin(dl) * Math.cos(f2);
-    const x = Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(dl);
-    return Geo.norm360(Math.atan2(y, x) * R2D);
-  },
   /** Destination after travelling `dist` metres from p along initial bearing `brg`. */
   destination(p, brg, dist) {
     const d = dist / Geo.R, t = brg * D2R, f1 = p.lat * D2R, l1 = p.lon * D2R;
     const f2 = Math.asin(Math.sin(f1) * Math.cos(d) + Math.cos(f1) * Math.sin(d) * Math.cos(t));
     const l2 = l1 + Math.atan2(Math.sin(t) * Math.sin(d) * Math.cos(f1), Math.cos(d) - Math.sin(f1) * Math.sin(f2));
     return { lat: f2 * R2D, lon: Geo.wrap180(l2 * R2D) };
-  },
-  /** Sampled great-circle path (for drawing bearing lines). */
-  path(p, brg, dist, n = 48) {
-    const out = [];
-    for (let i = 0; i <= n; i++) out.push(Geo.destination(p, brg, (dist * i) / n));
-    return out;
   },
   /** Centroid as normalised mean of unit vectors (works across the antimeridian). */
   centroid(points) {
@@ -496,55 +473,31 @@ const LinAlg = {
 };
 
 /* ---------- Observations & least-squares adjustment ---------- */
-const USE_RADIUS = { radius: true, bearing: false };
-const USE_BEARING = { radius: false, bearing: true };
-const USE_BOTH = { radius: true, bearing: true };
-
 function sigmaRadius(p) {
   return isNum(p.sigmaR) && p.sigmaR > 0 ? p.sigmaR : Math.max(CONFIG.DEFAULT_SIGMA_R_MIN_M, CONFIG.DEFAULT_SIGMA_R_REL * p.radius);
 }
-function sigmaBearingDeg(p) {
-  return isNum(p.sigmaB) && p.sigmaB > 0 ? p.sigmaB : CONFIG.DEFAULT_SIGMA_B_DEG;
-}
 
-/**
- * Convert measurement points into observations in the local plane.
- * A bearing (true north based, on the sphere) is converted into a plane
- * azimuth by projecting a point 10 m along the geodesic: this removes the
- * meridian convergence of the projection.
- */
-function buildObservations(points, proj, use) {
+/** Convert the radius measurements into observations in the local plane. */
+function buildObservations(points, proj) {
   const obs = [];
   for (const p of points) {
+    if (!hasRadius(p)) continue;
     const [px, py] = proj.forward(p.lat, p.lon);
-    if (use.radius && hasRadius(p)) {
-      obs.push({ type: 'radius', pid: p.id, name: p.name, point: p, px, py, value: p.radius, sigma: sigmaRadius(p) });
-    }
-    if (use.bearing && hasBearing(p)) {
-      const q = Geo.destination(p, p.bearing, 10);
-      const [qx, qy] = proj.forward(q.lat, q.lon);
-      obs.push({ type: 'bearing', pid: p.id, name: p.name, point: p, px, py,
-        value: Math.atan2(qx - px, qy - py), bearingDeg: Geo.norm360(p.bearing), sigma: sigmaBearingDeg(p) * D2R });
-    }
+    obs.push({ type: 'radius', pid: p.id, name: p.name, point: p, px, py, value: p.radius, sigma: sigmaRadius(p) });
   }
   return obs;
 }
 
 /**
  * Observation model at plane position (x, y):
- *   radius : f = sqrt((x-xi)² + (y-yi)²)        ∂f/∂x = (x-xi)/D, ∂f/∂y = (y-yi)/D
- *   bearing: f = atan2(x-xi, y-yi)  (azimuth)    ∂f/∂x = (y-yi)/D², ∂f/∂y = -(x-xi)/D²
- * Residual = f − observed (bearings wrapped to (−π, π]).
+ *   f = sqrt((x-xi)² + (y-yi)²),   ∂f/∂x = (x-xi)/D, ∂f/∂y = (y-yi)/D
+ * Residual = f − observed radius.
  */
 function obsModel(o, x, y) {
   const dx = x - o.px, dy = y - o.py;
-  if (o.type === 'radius') {
-    const D = Math.hypot(dx, dy);
-    if (D < 1e-9) return { res: -o.value, jx: 0, jy: 0 };
-    return { res: D - o.value, jx: dx / D, jy: dy / D };
-  }
-  const D2 = Math.max(dx * dx + dy * dy, 1e-9);
-  return { res: Geo.wrapPi(Math.atan2(dx, dy) - o.value), jx: dy / D2, jy: -dx / D2 };
+  const D = Math.hypot(dx, dy);
+  if (D < 1e-9) return { res: -o.value, jx: 0, jy: 0 };
+  return { res: D - o.value, jx: dx / D, jy: dy / D };
 }
 
 /** Weighted sum of squared residuals Σ (v/σ)², plus normal matrix N = JᵀWJ and gradient g = JᵀWv. */
@@ -622,34 +575,6 @@ function lensArea(r1, r2, d) {
   return r1 * r1 * a1 + r2 * r2 * a2 - 0.5 * Math.sqrt(Math.max(0, k));
 }
 /**
- * Intersection of two bearing rays Pi + ti·di and Pj + tj·dj (di = (sin α, cos α)).
- * Solving Pi + ti·di = Pj + tj·dj with 2-D cross products (a×b = ax·by − ay·bx):
- *   ti = ((Pj−Pi)×dj)/(di×dj),  tj = ((Pj−Pi)×di)/(di×dj).
- * ti, tj < 0 means the lines meet behind the observer.
- */
-function rayRay(o1, o2) {
-  const d1x = Math.sin(o1.value), d1y = Math.cos(o1.value), d2x = Math.sin(o2.value), d2y = Math.cos(o2.value);
-  const cross = d1x * d2y - d1y * d2x;
-  const angleDeg = Math.asin(Math.min(1, Math.abs(cross))) * R2D;
-  const wx = o2.px - o1.px, wy = o2.py - o1.py;
-  if (angleDeg < CONFIG.PARALLEL_LIMIT_DEG) {
-    const offset = Math.abs(wx * d1y - wy * d1x); // distance of P2 from line 1
-    const facing = d1x * d2x + d1y * d2y < 0 && (wx * d1x + wy * d1y) > 0;
-    return { parallel: true, angleDeg, offset, facing };
-  }
-  const t1 = (wx * d2y - wy * d2x) / cross, t2 = (wx * d1y - wy * d1x) / cross;
-  return { parallel: false, angleDeg, x: o1.px + t1 * d1x, y: o1.py + t1 * d1y, t1, t2 };
-}
-/** Intersections of a bearing ray with a circle: |P + t·d − C|² = r², t ≥ 0. */
-function rayCircle(ob, orad) {
-  const dx = Math.sin(ob.value), dy = Math.cos(ob.value);
-  const px = ob.px - orad.px, py = ob.py - orad.py;
-  const B = dx * px + dy * py, C = px * px + py * py - orad.value * orad.value, disc = B * B - C;
-  if (disc < 0) return [];
-  const s = Math.sqrt(disc);
-  return [-B - s, -B + s].filter((t) => t > 0).map((t) => [ob.px + t * dx, ob.py + t * dy]);
-}
-/**
  * Linearised trilateration: subtracting circle equation 0 from equation i removes
  * the quadratic terms:  2(xi−x0)·x + 2(yi−y0)·y = r0² − ri² + xi² − x0² + yi² − y0².
  * Solved in the least-squares sense; gives a good start value for LM.
@@ -666,27 +591,11 @@ function linearTrilateration(obsR) {
   }
   return LinAlg.solve2(a11, a12, a12, a22, b1, b2);
 }
-/** Point minimising the sum of squared perpendicular distances to all bearing lines: Σ(I − d·dᵀ)(X − Pi) = 0. */
-function linearLines(obsB) {
-  let a11 = 0, a12 = 0, a22 = 0, b1 = 0, b2 = 0;
-  for (const o of obsB) {
-    const dx = Math.sin(o.value), dy = Math.cos(o.value);
-    const m11 = 1 - dx * dx, m12 = -dx * dy, m22 = 1 - dy * dy;
-    a11 += m11; a12 += m12; a22 += m22;
-    b1 += m11 * o.px + m12 * o.py; b2 += m12 * o.px + m22 * o.py;
-  }
-  return LinAlg.solve2(a11, a12, a12, a22, b1, b2);
-}
-
 /** Collect start values from all closed-form constructions available for the observations. */
 function generateStarts(obs) {
-  const R = obs.filter((o) => o.type === 'radius'), B = obs.filter((o) => o.type === 'bearing');
+  const R = obs;
   const starts = [];
   const push = (p) => { if (p && Number.isFinite(p[0]) && Number.isFinite(p[1])) starts.push(p); };
-  for (const b of B) { // polar fix: same point has radius and bearing
-    const r = R.find((q) => q.pid === b.pid);
-    if (r) push([b.px + r.value * Math.sin(b.value), b.py + r.value * Math.cos(b.value)]);
-  }
   push(linearTrilateration(R));
   const lim = 40;
   for (let i = 0; i < Math.min(R.length, lim); i++) for (let j = i + 1; j < Math.min(R.length, lim); j++) {
@@ -698,17 +607,7 @@ function generateStarts(obs) {
       push([a.px + (t * dx) / d, a.py + (t * dy) / d]);
     }
   }
-  for (let i = 0; i < Math.min(B.length, lim); i++) for (let j = i + 1; j < Math.min(B.length, lim); j++) {
-    const rr = rayRay(B[i], B[j]);
-    if (!rr.parallel && rr.t1 > 0 && rr.t2 > 0) push([rr.x, rr.y]);
-  }
-  for (const b of B) for (const r of R) rayCircle(b, r).forEach(push);
-  if (B.length >= 2) push(linearLines(B));
   if (obs.length) push([obs.reduce((s, o) => s + o.px, 0) / obs.length, obs.reduce((s, o) => s + o.py, 0) / obs.length]);
-  for (const b of B) { // a point down each ray, in case nothing else exists
-    const L = R.length ? Math.max(...R.map((r) => r.value)) : 1000;
-    push([b.px + L * Math.sin(b.value), b.py + L * Math.cos(b.value)]);
-  }
   return starts;
 }
 
@@ -736,15 +635,14 @@ function solveLSQ(obs, starts) {
 
 /**
  * Re-centre the projection on the current estimate and adjust again. In an
- * azimuthal equidistant projection distances from the centre are exact and the
- * geodesic from an observer to the centre is a straight line, so after
- * re-centring both observation types are modelled without projection error.
+ * azimuthal equidistant projection distances from the centre are exact, so
+ * after re-centring the radii are modelled without projection error.
  */
-function recenter(points, use, start) {
+function recenter(points, start) {
   let cur = { lat: start.lat, lon: start.lon }, proj = null, obs = null, adj = null;
   for (let k = 0; k < 4; k++) {
     proj = Geo.makeProjection(cur);
-    obs = buildObservations(points, proj, use);
+    obs = buildObservations(points, proj);
     adj = adjust(obs, [0, 0]);
     const next = proj.inverse(adj.x, adj.y), moved = Geo.distance(cur, next);
     if (moved < 1e-4) break;
@@ -755,14 +653,14 @@ function recenter(points, use, start) {
 }
 
 /** Full least-squares pipeline: start values → LM → re-centring → equally good alternatives. */
-function lsqMulti(points, use) {
+function lsqMulti(points) {
   const proj = Geo.makeProjection(Geo.centroid(points));
-  const obs = buildObservations(points, proj, use);
+  const obs = buildObservations(points, proj);
   const planeSols = solveLSQ(obs, generateStarts(obs));
   if (!planeSols.length) return [];
   const best = planeSols[0].cost;
   const keep = planeSols.filter((s, i) => i === 0 || s.cost <= best + Math.max(1e-4, 0.01 * best)).slice(0, 4);
-  const refined = keep.map((s) => recenter(points, use, proj.inverse(s.x, s.y)));
+  const refined = keep.map((s) => recenter(points, proj.inverse(s.x, s.y)));
   const out = [];
   for (const r of refined.sort((a, b) => a.adj.cost - b.adj.cost)) {
     if (!out.some((q) => Geo.distance(q, r) < 1)) out.push(r);
@@ -773,12 +671,8 @@ function lsqMulti(points, use) {
 /** Residuals "computed − observed" evaluated on the sphere (independent of the projection). */
 function computeResiduals(obs, ll) {
   return obs.map((o) => {
-    if (o.type === 'radius') {
-      const computed = Geo.distance(o.point, ll), v = computed - o.value;
-      return { pid: o.pid, name: o.name, type: 'radius', unit: 'm', observed: o.value, computed, residual: v, sigma: o.sigma, norm: v / o.sigma };
-    }
-    const computed = Geo.bearing(o.point, ll), v = Geo.wrap180(computed - o.bearingDeg), sd = o.sigma * R2D;
-    return { pid: o.pid, name: o.name, type: 'bearing', unit: '°', observed: o.bearingDeg, computed, residual: v, sigma: sd, norm: v / sd };
+    const computed = Geo.distance(o.point, ll), v = computed - o.value;
+    return { pid: o.pid, name: o.name, type: 'radius', unit: 'm', observed: o.value, computed, residual: v, sigma: o.sigma, norm: v / o.sigma };
   });
 }
 
@@ -796,18 +690,6 @@ function intersectAll(polys) {
   for (let i = 1; i < polys.length && acc; i++) acc = turfIntersect(acc, polys[i]);
   return acc || null;
 }
-/** Bearing cone: apex at the observer, opening ±half degrees, length L (geodesic). */
-function wedgePolygon(p, brg, halfDeg, L) {
-  const half = Math.min(halfDeg, 80), n = Math.max(4, Math.ceil((2 * half) / 2));
-  const ring = [[p.lon, p.lat]];
-  for (let i = 0; i <= n; i++) {
-    const q = Geo.destination(p, brg - half + (2 * half * i) / n, L);
-    ring.push([q.lon, q.lat]);
-  }
-  ring.push([p.lon, p.lat]);
-  return turf.polygon([ring]);
-}
-
 /* ---------- Result object helpers ---------- */
 function newResult(mode) {
   return { mode, label: MODE_LABELS[mode], status: 'ok', messages: [], solutions: [], areas: [], stats: [], data: {} };
@@ -826,10 +708,6 @@ function makeSolution(label, rc, extra) {
   }
   return sol;
 }
-function noteIgnored(res, points, kind) {
-  const n = points.filter(kind === 'bearing' ? hasBearing : hasRadius).length;
-  if (n) msg(res, 'info', `${n} ${kind === 'bearing' ? 'bearing(s) are' : 'radius value(s) are'} ignored in this mode. Use “Mixed” or “Automatic” to include them.`);
-}
 /** Consistency checks shared by all adjustment modes. */
 function checkAdjustment(res, sol) {
   const a = sol.adjustment;
@@ -840,7 +718,7 @@ function checkAdjustment(res, sol) {
     msg(res, 'warning', `The measurements contradict each other (s₀ = ${a.s0.toFixed(2)}, expected ≈ 1). Check the values and their σ; suspicious residuals are flagged in red.`);
   }
   const out = sol.residuals.filter((r) => Math.abs(r.norm) > CONFIG.OUTLIER_NORM);
-  if (out.length && (a.dof > 0 || out.some((r) => r.type === 'bearing' && Math.abs(r.residual) > 90))) {
+  if (out.length && a.dof > 0) {
     msg(res, 'warning', `Large residuals (|v/σ| > ${CONFIG.OUTLIER_NORM}) at: ${[...new Set(out.map((r) => r.name))].join(', ')}.`);
   }
 }
@@ -885,7 +763,7 @@ function minEnclosingCircle(pts) {
 
 /* =====================================================================
  * 2b. MODES — each one a pure function: points[] → result
- *     point = {id, name, lat, lon, radius|null, sigmaR|null, bearing|null, sigmaB|null}
+ *     point = {id, name, lat, lon, radius|null, sigmaR|null}
  * ===================================================================== */
 const Modes = {
   /**
@@ -902,8 +780,7 @@ const Modes = {
     res.areas.push({ feature: poly, kind: 'area', label: `Possible area around ${p.name}`, areaM2: area });
     res.data = { area, circumference: circ, polygonArea: turf.area(poly) };
     res.stats.push(['Centre', Fmt.latlon(p.lat, p.lon)], ['Radius', Fmt.dist(p.radius)], ['Area', Fmt.area(area)], ['Circumference', Fmt.dist(circ)]);
-    msg(res, 'info', 'One radius cannot fix a position: the target lies inside the circle (radius = maximum distance) or on its edge (radius = measured distance). Add a second radius or a bearing.');
-    if (hasBearing(p)) msg(res, 'info', 'This point also has a bearing – “Mixed” mode would give a direct position (polar fix).');
+    msg(res, 'info', 'One radius cannot fix a position: the target lies inside the circle (radius = maximum distance) or on its edge (radius = measured distance). Add a second radius.');
     return res;
   },
 
@@ -919,9 +796,8 @@ const Modes = {
     const res = newResult('twoCircles');
     const pr = points.filter(hasRadius);
     if (pr.length !== 2) return msg(res, 'error', `Mode 2 needs exactly two points with a radius (found ${pr.length}).`);
-    noteIgnored(res, points, 'bearing');
     const proj = Geo.makeProjection(Geo.centroid(pr));
-    const [o1, o2] = buildObservations(pr, proj, USE_RADIUS);
+    const [o1, o2] = buildObservations(pr, proj);
     const cc = circleCircle(o1.px, o1.py, o1.value, o2.px, o2.py, o2.value);
     const dCent = Geo.distance(pr[0], pr[1]);
     res.data.relation = cc.type;
@@ -946,13 +822,13 @@ const Modes = {
     if (cc.type === 'intersect' || cc.type === 'tangent') {
       res.data.intersections = [];
       cc.points.forEach((pt, i) => {
-        const rc = recenter(pr, USE_RADIUS, proj.inverse(pt[0], pt[1]));
+        const rc = recenter(pr, proj.inverse(pt[0], pt[1]));
         const sol = makeSolution(cc.points.length > 1 ? `Intersection point ${'AB'[i]}` : 'Touching point', rc, { kind: i === 0 ? 'estimate' : 'alternative' });
         res.solutions.push(sol);
         res.data.intersections.push({ lat: sol.lat, lon: sol.lon });
       });
       if (cc.type === 'intersect') {
-        msg(res, 'info', 'Two intersection points: if the radii are exact distances the target is at A or B (this cannot be decided from two circles – add a third radius or a bearing). If the radii are maximum distances, the target is inside the lens.');
+        msg(res, 'info', 'Two intersection points: if the radii are exact distances the target is at A or B (this cannot be decided from two circles – add a third radius). If the radii are maximum distances, the target is inside the lens.');
       } else {
         msg(res, 'info', 'The circles touch in a single point. The position is poorly determined perpendicular to the centre line.');
       }
@@ -978,7 +854,7 @@ const Modes = {
     }
     const ll = proj.inverse(X[0], X[1]);
     const proj2 = Geo.makeProjection(ll);
-    const obs2 = buildObservations(pr, proj2, USE_RADIUS);
+    const obs2 = buildObservations(pr, proj2);
     res.solutions.push(makeSolution('Point of least deviation', { lat: ll.lat, lon: ll.lon, proj: proj2, obs: obs2, adj: null }, { kind: 'deviation' }));
     res.data.deviationPoint = ll;
     res.stats.push(['Gap between circles', Fmt.dist(cc.gap)]);
@@ -995,11 +871,10 @@ const Modes = {
     const res = newResult('trilateration');
     const pr = points.filter(hasRadius);
     if (pr.length < 3) return msg(res, 'error', `Trilateration needs at least three points with a radius (found ${pr.length}).`);
-    noteIgnored(res, points, 'bearing');
-    const sols = lsqMulti(pr, USE_RADIUS);
+    const sols = lsqMulti(pr);
     if (!sols.length) return msg(res, 'error', 'The adjustment failed – no solution found.');
     sols.forEach((rc, i) => res.solutions.push(makeSolution(sols.length > 1 ? `Solution ${'ABCD'[i]}` : 'Least-squares estimate', rc, { kind: i ? 'alternative' : 'estimate' })));
-    if (sols.length > 1) msg(res, 'warning', `Ambiguous: ${sols.length} equally good positions. This happens when all circle centres lie (almost) on one line – add a point off that line or a bearing.`);
+    if (sols.length > 1) msg(res, 'warning', `Ambiguous: ${sols.length} equally good positions. This happens when all circle centres lie (almost) on one line – add a point off that line.`);
     const best = res.solutions[0];
     checkAdjustment(res, best);
     addAdjustmentStats(res, best);
@@ -1014,101 +889,7 @@ const Modes = {
     return res;
   },
 
-  /**
-   * Mode 4 — triangulation (bearings). Two bearings: closed-form ray intersection.
-   * More bearings: least squares on the angular residuals
-   *   v = atan2(x − xi, y − yi) − αi,  weights 1/σ²,
-   * started from all forward ray intersections and the linear "closest point to all lines".
-   * Parallel rays (crossing angle < limit) and intersections behind an observer are reported.
-   * The area is the intersection of the ±k·σ bearing cones.
-   */
-  triangulation(points) {
-    const res = newResult('triangulation');
-    const pb = points.filter(hasBearing);
-    if (pb.length < 2) return msg(res, 'error', `Triangulation needs at least two points with a bearing (found ${pb.length}).`);
-    noteIgnored(res, points, 'radius');
-    const proj = Geo.makeProjection(Geo.centroid(pb));
-    const obs = buildObservations(pb, proj, USE_BEARING);
-    let minAngle = 90, anyForward = false, parallelPairs = 0, pairs = 0;
-    let firstPair = null;
-    for (let i = 0; i < obs.length; i++) for (let j = i + 1; j < obs.length; j++) {
-      const rr = rayRay(obs[i], obs[j]); pairs++;
-      if (!firstPair) firstPair = rr;
-      if (rr.parallel) { parallelPairs++; continue; }
-      minAngle = Math.min(minAngle, rr.angleDeg);
-      if (rr.t1 > 0 && rr.t2 > 0) anyForward = true;
-    }
-    if (parallelPairs === pairs) {
-      if (obs.length === 2 && firstPair.facing && firstPair.offset < Math.max(1, 0.01 * Math.hypot(obs[1].px - obs[0].px, obs[1].py - obs[0].py))) {
-        return msg(res, 'error', 'Both bearings lie on the same line and point at each other: the target is somewhere between the two observers, but its position along the line cannot be determined.');
-      }
-      return msg(res, 'error', `The bearing lines are parallel (crossing angle < ${CONFIG.PARALLEL_LIMIT_DEG}°) – they have no usable intersection.`);
-    }
-    if (obs.length === 2 && !anyForward) {
-      const rr = firstPair, ll = proj.inverse(rr.x, rr.y);
-      const proj2 = Geo.makeProjection(ll);
-      res.solutions.push(makeSolution('Line intersection (behind observer)', { lat: ll.lat, lon: ll.lon, proj: proj2, obs: buildObservations(pb, proj2, USE_BEARING), adj: null }, { kind: 'deviation' }));
-      return msg(res, 'warning', `The bearing rays do not meet in front of the observers – the lines only intersect behind ${rr.t1 <= 0 ? obs[0].name : obs[1].name}. The bearings are contradictory; check the directions.`);
-    }
-    const sols = lsqMulti(pb, USE_BEARING);
-    if (!sols.length) return msg(res, 'error', 'The adjustment failed – no solution found.');
-    sols.forEach((rc, i) => res.solutions.push(makeSolution(sols.length > 1 ? `Solution ${'ABCD'[i]}` : (pb.length === 2 ? 'Intersection of bearings' : 'Least-squares estimate'), rc, { kind: i ? 'alternative' : 'estimate' })));
-    const best = res.solutions[0];
-    checkAdjustment(res, best);
-    addAdjustmentStats(res, best);
-    if (parallelPairs) msg(res, 'info', `${parallelPairs} pair(s) of bearing lines are (nearly) parallel and were not used for start values.`);
-    if (minAngle < CONFIG.POOR_GEOMETRY_DEG) msg(res, 'info', `Poor intersection geometry: the bearing lines cross at only ${minAngle.toFixed(1)}°. The uncertainty along the lines is large.`);
-    if (best.residuals.some((r) => Math.abs(r.residual) > 90)) msg(res, 'warning', 'The estimate lies behind at least one observer (bearing residual > 90°) – the bearings are contradictory.');
-    res.stats.push(['Smallest crossing angle', `${minAngle.toFixed(1)}°`]);
-    // Bearing cones (±k·σ) and their intersection
-    const maxD = Math.max(...pb.map((p) => Geo.distance(p, best)));
-    const L = Math.max(1000, 1.5 * maxD);
-    const cones = pb.map((p) => wedgePolygon(p, p.bearing, CONFIG.WEDGE_K * sigmaBearingDeg(p), L));
-    const common = intersectAll(cones);
-    if (common) {
-      res.areas.push({ feature: common, kind: 'area', label: `Intersection of the ±${CONFIG.WEDGE_K}σ bearing cones`, areaM2: turf.area(common) });
-      res.stats.push([`Cone intersection (±${CONFIG.WEDGE_K}σ)`, Fmt.area(turf.area(common))]);
-    }
-    return res;
-  },
-
-  /**
-   * Mode 5 — mixed. Radii and bearings enter one weighted adjustment
-   * (radius residuals in metres / σ_r, bearing residuals in radians / σ_b), so
-   * both types become dimensionless and comparable. Start values come from
-   * polar fixes, circle/ray intersections and the linear solutions.
-   */
-  mixed(points) {
-    const res = newResult('mixed');
-    const used = points.filter((p) => hasRadius(p) || hasBearing(p));
-    const nR = used.filter(hasRadius).length, nB = used.filter(hasBearing).length;
-    if (nR + nB < 2) return msg(res, 'error', `The joint adjustment needs at least two measurements in total (found ${nR} radius, ${nB} bearing).`);
-    if (!nR || !nB) msg(res, 'info', `Only ${nR ? 'radii' : 'bearings'} are present – the joint adjustment works, but mode ${nR ? 3 : 4} gives the more specific display.`);
-    if (nB === 0 && nR === 2) msg(res, 'info', 'Two radii alone usually give two possible positions.');
-    const sols = lsqMulti(used, USE_BOTH);
-    if (!sols.length) return msg(res, 'error', 'The adjustment failed – no solution found.');
-    sols.forEach((rc, i) => res.solutions.push(makeSolution(sols.length > 1 ? `Solution ${'ABCD'[i]}` : 'Joint least-squares estimate', rc, { kind: i ? 'alternative' : 'estimate' })));
-    if (sols.length > 1) msg(res, 'warning', `Ambiguous: ${sols.length} equally good positions. Add another radius or bearing to decide.`);
-    const best = res.solutions[0];
-    checkAdjustment(res, best);
-    addAdjustmentStats(res, best);
-    res.stats.push(['Radii / bearings used', `${nR} / ${nB}`]);
-    const polys = used.filter(hasRadius).map((p) => turfCircle(p, p.radius));
-    const pb = used.filter(hasBearing);
-    if (pb.length) {
-      const maxD = Math.max(...pb.map((p) => Geo.distance(p, best)), ...used.filter(hasRadius).map((p) => p.radius));
-      const L = Math.max(1000, 1.5 * maxD);
-      pb.forEach((p) => polys.push(wedgePolygon(p, p.bearing, CONFIG.WEDGE_K * sigmaBearingDeg(p), L)));
-    }
-    const common = intersectAll(polys);
-    if (common) {
-      res.areas.push({ feature: common, kind: 'area', label: `Common area (circles ∩ ±${CONFIG.WEDGE_K}σ bearing cones)`, areaM2: turf.area(common) });
-      res.stats.push(['Common area', Fmt.area(turf.area(common))]);
-    }
-    return res;
-  },
-
-  /** Mode 6 — Delaunay triangulation of the points (turf.tin): no circumcircle contains another point. */
+  /** Mode 5 — Delaunay triangulation of the points (turf.tin): no circumcircle contains another point. */
   delaunay(points) {
     const res = newResult('delaunay');
     const seen = new Set(), uniq = [];
@@ -1138,12 +919,12 @@ const Modes = {
     res.data = { triangles: tris.length, edges: edges.size, totalArea: total };
     res.stats.push(['Points', String(uniq.length)], ['Triangles', String(tris.length)], ['Edges', String(edges.size)],
       ['Total area (convex hull)', Fmt.area(total)], ['Shortest / longest edge', `${Fmt.dist(Math.min(...lens))} / ${Fmt.dist(Math.max(...lens))}`]);
-    msg(res, 'info', 'Delaunay mesh of the measurement points (no target estimate in this mode).');
+    msg(res, 'info', 'Delaunay mesh: every point is connected to its natural neighbours with triangles that are as “fat” as possible. The outer edge encloses all points (convex hull); “Total area” is the area the points span. Long edges and big triangles show gaps between the points. No target estimate in this mode.');
     return res;
   },
 
   /**
-   * Mode 7 — coordinates only, equal radius. The smallest radius r for which
+   * Mode 4 — coordinates only, equal radius. The smallest radius r for which
    * circles of radius r around all points share a common point equals the
    * radius of the minimum enclosing circle; that common point is its centre
    * (the point minimising the largest distance to all points).
@@ -1160,7 +941,7 @@ const Modes = {
       if (!seen.has(key)) { seen.add(key); uniq.push(p); }
     }
     if (uniq.length < (R ? 1 : 2)) return msg(res, 'error', R ? 'This mode needs at least one point.' : `Without an allowed distance this mode needs at least two distinct points (found ${uniq.length}).`);
-    if (points.some((p) => hasRadius(p) || hasBearing(p))) msg(res, 'info', 'Entered radii and bearings are ignored in this mode.');
+    if (points.some(hasRadius)) msg(res, 'info', 'Entered radii are ignored in this mode.');
     let center = Geo.centroid(uniq);
     for (let k = 0; k < 6; k++) {
       const proj = Geo.makeProjection(center);
@@ -1213,24 +994,17 @@ const Modes = {
 /** Automatic mode selection from the available data. */
 function autoSelect(points, opts) {
   const allowed = opts && isNum(opts.allowedDistance) && opts.allowedDistance > 0;
-  const nR = points.filter(hasRadius).length, nB = points.filter(hasBearing).length;
+  const nR = points.filter(hasRadius).length;
   if (!points.length) return { mode: null, reason: 'No usable points yet. Click on the map or add a row.' };
-  if (!nR && !nB) {
+  if (!nR) {
     if (points.length >= 2 || allowed) {
       return { mode: 'equalRadius', reason: allowed ? 'coordinates only + allowed distance → possible hiding area' : 'coordinates only → equal radius determined automatically' };
     }
-    return { mode: null, reason: 'Enter a radius and/or a bearing, add a second point, or enter an allowed distance.' };
+    return { mode: null, reason: 'Enter a radius, add a second point, or enter an allowed distance.' };
   }
-  if (!nB) {
-    if (nR === 1) return { mode: 'circle', reason: 'one radius' };
-    if (nR === 2) return { mode: 'twoCircles', reason: 'two radii' };
-    return { mode: 'trilateration', reason: `${nR} radii` };
-  }
-  if (!nR) {
-    return nB >= 2 ? { mode: 'triangulation', reason: `${nB} bearings` }
-      : { mode: null, reason: 'A single bearing only gives a line. Add a second bearing or a radius.' };
-  }
-  return { mode: 'mixed', reason: `${nR} radius / ${nB} bearing measurement(s)` };
+  if (nR === 1) return { mode: 'circle', reason: 'one radius' };
+  if (nR === 2) return { mode: 'twoCircles', reason: 'two radii' };
+  return { mode: 'trilateration', reason: `${nR} radii` };
 }
 
 function runMode(mode, points, opts) {
@@ -1261,10 +1035,10 @@ const Fmt = {
  * 3. STATE  (points are stored as the strings the user typed)
  * ===================================================================== */
 const State = {
-  points: [],      // {id, name, lat, lon, radius, sigmaR, bearing, sigmaB, visible}
+  points: [],      // {id, name, lat, lon, radius, sigmaR, visible}
   mode: 'auto',
   clickAdd: true,
-  allowedDist: '',  // mode 7: allowed distance from the hiding spot (string as typed)
+  allowedDist: '',  // mode 4: allowed distance from the hiding spot (string as typed)
   theme: 'auto',
   baseLayers: {},  // explicit base map choice per context: {file: name, web: name}
   nextId: 1,
@@ -1274,7 +1048,7 @@ const State = {
   byId(id) { return this.points.find((p) => p.id === id); },
   add(partial) {
     const id = this.nextId++;
-    const p = Object.assign({ id, name: 'P' + id, lat: '', lon: '', radius: '', sigmaR: '', bearing: '', sigmaB: '', visible: true }, partial || {});
+    const p = Object.assign({ id, name: 'P' + id, lat: '', lon: '', radius: '', sigmaR: '', visible: true }, partial || {});
     p.id = id;
     if (!p.name) p.name = 'P' + id;
     this.points.push(p);
@@ -1298,7 +1072,7 @@ const State = {
       const str = (v) => (v === null || v === undefined ? '' : String(v));
       this.points = s.points.map((p, i) => ({
         id: Number.isInteger(p.id) ? p.id : i + 1, name: str(p.name), lat: str(p.lat), lon: str(p.lon), radius: str(p.radius),
-        sigmaR: str(p.sigmaR), bearing: str(p.bearing), sigmaB: str(p.sigmaB), visible: p.visible !== false,
+        sigmaR: str(p.sigmaR), visible: p.visible !== false,
       }));
       this.nextId = Math.max(Number(s.nextId) || 1, ...this.points.map((p) => p.id + 1), 1);
       if (MODE_LABELS[s.mode]) this.mode = s.mode;
@@ -1323,13 +1097,11 @@ function parseNumber(s) {
 function parsePoint(p, index) {
   const invalid = {}, errors = [];
   const lat = parseNumber(p.lat), lon = parseNumber(p.lon);
-  const radius = parseNumber(p.radius), sigmaR = parseNumber(p.sigmaR), bearing = parseNumber(p.bearing), sigmaB = parseNumber(p.sigmaB);
+  const radius = parseNumber(p.radius), sigmaR = parseNumber(p.sigmaR);
   if (lat === null || Number.isNaN(lat) || lat < -90 || lat > 90) { invalid.lat = true; errors.push(lat === null ? 'latitude missing' : 'latitude must be between −90 and 90'); }
   if (lon === null || Number.isNaN(lon) || lon < -180 || lon > 180) { invalid.lon = true; errors.push(lon === null ? 'longitude missing' : 'longitude must be between −180 and 180'); }
   if (radius !== null && (Number.isNaN(radius) || radius <= 0)) { invalid.radius = true; errors.push('radius must be a positive number (metres)'); }
   if (sigmaR !== null && (Number.isNaN(sigmaR) || sigmaR <= 0)) { invalid.sigmaR = true; errors.push('σ r must be a positive number'); }
-  if (bearing !== null && Number.isNaN(bearing)) { invalid.bearing = true; errors.push('bearing must be a number (degrees)'); }
-  if (sigmaB !== null && (Number.isNaN(sigmaB) || sigmaB <= 0 || sigmaB >= 90)) { invalid.sigmaB = true; errors.push('σ b must be between 0 and 90 degrees'); }
   const ok = !invalid.lat && !invalid.lon;
   const clean = (v, bad) => (bad || v === null ? null : v);
   return {
@@ -1337,7 +1109,6 @@ function parsePoint(p, index) {
     value: {
       id: p.id, name: (p.name || '').trim() || 'P' + (index + 1), lat, lon,
       radius: clean(radius, invalid.radius), sigmaR: clean(sigmaR, invalid.sigmaR),
-      bearing: invalid.bearing || bearing === null ? null : Geo.norm360(bearing), sigmaB: clean(sigmaB, invalid.sigmaB),
     },
   };
 }
@@ -1410,16 +1181,14 @@ const CoordParser = {
 };
 
 const IO = {
-  FIELDS: ['name', 'lat', 'lon', 'radius', 'sigmaR', 'bearing', 'sigmaB', 'visible'],
-  CSV_HEADER: ['name', 'lat', 'lon', 'radius_m', 'sigma_radius_m', 'bearing_deg', 'sigma_bearing_deg', 'visible'],
+  FIELDS: ['name', 'lat', 'lon', 'radius', 'sigmaR', 'visible'],
+  CSV_HEADER: ['name', 'lat', 'lon', 'radius_m', 'sigma_radius_m', 'visible'],
   ALIASES: {
     name: ['name', 'label', 'id', 'title', 'point'],
     lat: ['lat', 'latitude', 'lat_deg', 'y'],
     lon: ['lon', 'lng', 'long', 'longitude', 'lon_deg', 'x'],
     radius: ['radius_m', 'radius', 'r', 'distance', 'distance_m', 'range', 'range_m', 'dist'],
     sigmaR: ['sigma_radius_m', 'sigma_r', 'sigma_radius', 'radius_sigma', 'sigmar', 'uncertainty_m', 'radius_uncertainty', 'sigma_m'],
-    bearing: ['bearing_deg', 'bearing', 'azimuth', 'azimuth_deg', 'az', 'heading', 'direction'],
-    sigmaB: ['sigma_bearing_deg', 'sigma_b', 'sigma_bearing', 'bearing_sigma', 'sigmab', 'uncertainty_deg', 'bearing_uncertainty'],
     visible: ['visible', 'show', 'enabled', 'use'],
   },
   fieldFor(header) {
@@ -1434,8 +1203,8 @@ const IO = {
   toCSV(points) {
     const rows = [this.CSV_HEADER.join(',')];
     for (const p of points) {
-      rows.push([p.name, p.lat, p.lon, p.radius, p.sigmaR, p.bearing, p.sigmaB, p.visible === false ? 'false' : 'true']
-        .map((v, i) => this.csvEscape(i > 0 && i < 7 ? String(v).trim().replace(',', '.') : v)).join(','));
+      rows.push([p.name, p.lat, p.lon, p.radius, p.sigmaR, p.visible === false ? 'false' : 'true']
+        .map((v, i) => this.csvEscape(i > 0 && i < 5 ? String(v).trim().replace(',', '.') : v)).join(','));
     }
     return rows.join('\r\n') + '\r\n';
   },
@@ -1470,7 +1239,7 @@ const IO = {
     if (!map.includes('lat') || !map.includes('lon')) {
       const numeric = rows[0].every((c) => c.trim() === '' || !Number.isNaN(parseNumber(c)));
       if (!numeric) throw new Error('No “lat” and “lon” columns found in the CSV header.');
-      map = ['lat', 'lon', 'radius', 'bearing', 'sigmaR', 'sigmaB']; // header-less: lat,lon,radius,bearing,…
+      map = ['lat', 'lon', 'radius', 'sigmaR']; // header-less: lat,lon,radius,sigma_radius
       body = rows;
     }
     return body.map((r) => {
@@ -1491,7 +1260,7 @@ const IO = {
       features: points.filter((p) => Number.isFinite(parseNumber(p.lat)) && Number.isFinite(parseNumber(p.lon))).map((p) => ({
         type: 'Feature',
         geometry: { type: 'Point', coordinates: [num(p.lon), num(p.lat)] },
-        properties: { name: p.name, radius_m: num(p.radius), sigma_radius_m: num(p.sigmaR), bearing_deg: num(p.bearing), sigma_bearing_deg: num(p.sigmaB), visible: p.visible !== false },
+        properties: { name: p.name, radius_m: num(p.radius), sigma_radius_m: num(p.sigmaR), visible: p.visible !== false },
       })),
     };
   },
@@ -1532,7 +1301,7 @@ const IO = {
       }, meta) });
     }
     for (const a of result.areas) features.push({ type: 'Feature', geometry: a.feature.geometry, properties: Object.assign({ role: a.kind === 'mesh' ? 'triangle' : a.kind === 'circle' ? 'equal_radius_circle' : 'area', label: a.label, area_m2: a.areaM2 }, meta) });
-    for (const p of activePoints) features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [p.lon, p.lat] }, properties: { role: 'measurement_point', name: p.name, radius_m: p.radius, sigma_radius_m: p.sigmaR, bearing_deg: p.bearing, sigma_bearing_deg: p.sigmaB } });
+    for (const p of activePoints) features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [p.lon, p.lat] }, properties: { role: 'measurement_point', name: p.name, radius_m: p.radius, sigma_radius_m: p.sigmaR } });
     return { type: 'FeatureCollection', features };
   },
 };
@@ -1643,24 +1412,12 @@ const MapView = {
     scheduleRecalc();
   },
 
-  /** Radius circles and bearing lines of the active measurement points. */
-  drawObservations(active, result) {
+  /** Radius circles of the active measurement points. */
+  drawObservations(active) {
     this.obsLayer.clearLayers();
-    const primary = result && result.solutions && result.solutions[0];
-    let spread = 0;
-    for (let i = 0; i < active.length; i++) for (let j = i + 1; j < active.length; j++) spread = Math.max(spread, Geo.distance(active[i], active[j]));
-    const maxR = Math.max(0, ...active.filter(hasRadius).map((p) => p.radius));
     for (const p of active) {
       if (hasRadius(p)) {
         L.circle([p.lat, p.lon], { radius: p.radius, color: '#1c64d6', weight: 2, dashArray: '6 5', fillColor: '#1c64d6', fillOpacity: 0.04, interactive: false }).addTo(this.obsLayer);
-      }
-      if (hasBearing(p)) {
-        let L0 = Math.max(3000, 1.5 * spread, 1.2 * maxR);
-        if (primary) { const d = Geo.distance(p, primary); L0 = Math.max(1.4 * d, 500); }
-        const pts = Geo.path(p, p.bearing, L0).map((q) => [q.lat, q.lon]);
-        L.polyline(pts, { color: '#e8590c', weight: 2.5, dashArray: '10 6', interactive: false }).addTo(this.obsLayer);
-        const end = pts[pts.length - 1];
-        L.circleMarker(end, { radius: 3, color: '#e8590c', fillOpacity: 1, interactive: false }).addTo(this.obsLayer);
       }
     }
   },
@@ -1708,7 +1465,6 @@ const UI = {
   init() {
     $('#appVersion').textContent = 'v' + APP_VERSION;
     $('#hintSigR').textContent = `${CONFIG.DEFAULT_SIGMA_R_REL * 100} % of r, min. ${CONFIG.DEFAULT_SIGMA_R_MIN_M} m`;
-    $('#hintSigB').textContent = `${CONFIG.DEFAULT_SIGMA_B_DEG}°`;
     $('#modeSelect').value = State.mode;
     $('#clickAdd').checked = State.clickAdd;
     this.applyTheme();
@@ -1898,7 +1654,7 @@ const UI = {
     const tbody = $('#pointsBody');
     $('#pointCount').textContent = State.points.length ? `${State.points.length} point(s)` : '';
     if (!State.points.length) {
-      tbody.innerHTML = '<tr class="empty"><td colspan="10"><div class="empty-msg">No points yet – click on the map, add a row, import a file or load an example.</div></td></tr>';
+      tbody.innerHTML = '<tr class="empty"><td colspan="8"><div class="empty-msg">No points yet – click on the map, add a row, import a file or load an example.</div></td></tr>';
       return;
     }
     const inp = (p, f, cls, ph, title) => `<input type="text" data-f="${f}" class="${cls}" value="${this.esc(p[f])}" placeholder="${ph}" aria-label="${title}" title="${title}"${f === 'name' ? '' : ' inputmode="decimal"'} autocomplete="off" spellcheck="false">`;
@@ -1910,8 +1666,6 @@ const UI = {
       <td>${inp(p, 'lon', 'w-coord', '11.575', 'Longitude in decimal degrees')}</td>
       <td>${inp(p, 'radius', 'w-num', '–', 'Radius / distance in metres')}</td>
       <td>${inp(p, 'sigmaR', 'w-sig', 'auto', 'Radius standard deviation in metres')}</td>
-      <td>${inp(p, 'bearing', 'w-num', '–', 'Bearing in degrees from true north')}</td>
-      <td>${inp(p, 'sigmaB', 'w-sig', 'auto', 'Bearing standard deviation in degrees')}</td>
       <td><button type="button" class="icon-btn danger" data-act="del" title="Delete point" aria-label="Delete point">✕</button></td>
     </tr>`).join('');
     tbody.querySelectorAll('tr[data-id]').forEach((tr) => this.validateRow(tr, State.byId(Number(tr.dataset.id))));
@@ -1977,13 +1731,13 @@ const UI = {
     } else if (primary && primary.residuals.length) {
       const rows = primary.residuals.map((r) => {
         const d = r.unit === 'm' ? 2 : 3, flag = Math.abs(r.norm) > CONFIG.OUTLIER_NORM;
-        return `<tr><td>${this.esc(r.name)}</td><td>${r.type}</td>
+        return `<tr><td>${this.esc(r.name)}</td>
           <td class="num">${Fmt.num(r.observed, d)}${r.unit}</td><td class="num">${Fmt.num(r.computed, d)}${r.unit}</td>
           <td class="num${flag ? ' flag' : ''}">${r.residual >= 0 ? '+' : ''}${Fmt.num(r.residual, d)}${r.unit}</td>
           <td class="num${flag ? ' flag' : ''}">${Fmt.num(r.norm, 2)}</td></tr>`;
       }).join('');
-      $('#residuals').innerHTML = `<div class="muted" style="font-size:12px;margin:4px 0">Residuals for “${this.esc(primary.label)}” (computed − observed, on the sphere):</div>
-        <div class="table-wrap"><table class="res"><thead><tr><th>Point</th><th>Type</th><th>Observed</th><th>Computed</th><th>Residual v</th><th>v/σ</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      $('#residuals').innerHTML = `<div class="muted" style="font-size:12px;margin:4px 0">Residuals for “${this.esc(primary.label)}”: actual distance − entered radius, on the sphere:</div>
+        <div class="table-wrap"><table class="res"><thead><tr><th>Point</th><th>Radius</th><th>Distance</th><th>Residual v</th><th>v/σ</th></tr></thead><tbody>${rows}</tbody></table></div>`;
     } else $('#residuals').innerHTML = '';
     $('#btnExportResult').disabled = !(result && (result.solutions.length || result.areas.length));
   },
@@ -2015,11 +1769,11 @@ function recalc() {
     if (pp.visible && pp.errors.length) rowMessages.push({ level: pp.ok ? 'warning' : 'error', text: `Row ${pp.index + 1} (${pp.value.name}): ${pp.errors.join('; ')}${pp.ok ? ' – value ignored.' : ' – point ignored.'}` });
   });
   const active = parsed.filter((pp) => pp.ok && pp.visible).map((pp) => pp.value);
-  // Allowed distance (mode 7): shown when mode 7 is selected or automatic mode may pick it
+  // Allowed distance (mode 4): shown when mode 4 is selected or automatic mode may pick it
   const allowedRaw = parseNumber(State.allowedDist);
   const allowedBad = allowedRaw !== null && !(allowedRaw > 0);
   const opts = { allowedDistance: allowedRaw > 0 ? allowedRaw : null };
-  const showAllowed = State.mode === 'equalRadius' || (State.mode === 'auto' && !active.some((p) => hasRadius(p) || hasBearing(p)));
+  const showAllowed = State.mode === 'equalRadius' || (State.mode === 'auto' && !active.some(hasRadius));
   $('#allowedField').hidden = !showAllowed; $('#allowedHint').hidden = !showAllowed;
   $('#allowedDist').classList.toggle('invalid', allowedBad);
   if (showAllowed && allowedBad) rowMessages.push({ level: 'warning', text: 'Allowed distance must be a positive number of metres – value ignored.' });
@@ -2030,7 +1784,7 @@ function recalc() {
   const result = sel.mode ? runMode(sel.mode, active, opts) : null;
   State.lastResult = result; State.lastSelection = sel; State.lastActive = active;
   MapView.syncMarkers(parsed);
-  MapView.drawObservations(active, result);
+  MapView.drawObservations(active);
   MapView.drawResult(result);
   UI.renderResult(result, sel, rowMessages);
   State.save();
@@ -2044,21 +1798,12 @@ const Examples = {
     const f6 = (v) => v.toFixed(6);
     const pt = (name, q, extra) => Object.assign({ name, lat: f6(q.lat), lon: f6(q.lon) }, extra || {});
     const rad = (q, off = 0) => (Geo.distance(q, T) + off).toFixed(0);
-    const brg = (q, off = 0) => Geo.norm360(Geo.bearing(q, T) + off).toFixed(1);
     switch (kind) {
       case 'circle': { const a = st(250, 1200); return [pt('Tower', a, { radius: '1500' })]; }
       case 'two': { const a = st(300, 2500), b = st(40, 1800); return [pt('A', a, { radius: rad(a, 40) }), pt('B', b, { radius: rad(b, -25) })]; }
       case 'tri': {
         const qs = [st(10, 3200), st(130, 2600), st(235, 3900), st(300, 1800)], off = [35, -20, 50, -15];
         return qs.map((q, i) => pt('S' + (i + 1), q, { radius: rad(q, off[i]), sigmaR: '50' }));
-      }
-      case 'bearings': {
-        const qs = [st(200, 4000), st(95, 3000), st(330, 3500)], off = [0.8, -0.6, 0.4];
-        return qs.map((q, i) => pt('O' + (i + 1), q, { bearing: brg(q, off[i]), sigmaB: '1' }));
-      }
-      case 'mixed': {
-        const a = st(45, 2500), b = st(160, 3000), c = st(280, 3500);
-        return [pt('R1', a, { radius: rad(a, 30), sigmaR: '40' }), pt('R2', b, { radius: rad(b, -25), sigmaR: '40' }), pt('B1', c, { bearing: brg(c, 0.5), sigmaB: '1' })];
       }
       case 'mesh': {
         const qs = [[0, 0], [20, 1500], [80, 2200], [140, 1800], [200, 2500], [260, 1700], [320, 2100], [110, 3600]];
@@ -2079,10 +1824,9 @@ const Examples = {
 const Tests = (() => {
   const T0 = { lat: 48.1374, lon: 11.5755 };
   let seq = 0;
-  const P = (q, o) => Object.assign({ id: ++seq, name: 'T' + seq, lat: q.lat, lon: q.lon, radius: null, sigmaR: null, bearing: null, sigmaB: null }, o || {});
+  const P = (q, o) => Object.assign({ id: ++seq, name: 'T' + seq, lat: q.lat, lon: q.lon, radius: null, sigmaR: null }, o || {});
   const st = (brg, dist, o) => P(Geo.destination(T0, brg, dist), o);
   const R = (p, off = 0) => { p.radius = Geo.distance(p, T0) + off; return p; };
-  const B = (p, off = 0) => { p.bearing = Geo.norm360(Geo.bearing(p, T0) + off); return p; };
   const err = (s, t = T0) => Geo.distance(s, t);
   const near = (a, b, tol) => Math.abs(a - b) <= tol;
   const ok = (pass, detail) => ({ pass: !!pass, detail });
@@ -2149,46 +1893,6 @@ const Tests = (() => {
       const e = err(best(r));
       return ok(e < 0.05, `error ${e.toFixed(4)} m`);
     } },
-    { name: 'Mode 4: two bearings intersect at the target', run() {
-      const r = Modes.triangulation([B(st(200, 4000)), B(st(95, 3000))]);
-      const s = best(r), e = err(s);
-      return ok(e < 0.05 && !s.adjustment.degenerate, `error ${e.toFixed(4)} m`);
-    } },
-    { name: 'Mode 4: three noisy bearings → least squares', run() {
-      const r = Modes.triangulation([B(st(200, 4000), 0.5), B(st(95, 3000), -0.4), B(st(330, 3500), 0.3)]);
-      const s = best(r), e = err(s);
-      return ok(e < 50 && s.adjustment.dof === 1 && r.areas.length === 1, `error ${e.toFixed(1)} m, s0 = ${s.adjustment.s0.toFixed(2)}, cone area ${r.areas.length ? Fmt.area(r.areas[0].areaM2) : '–'}`);
-    } },
-    { name: 'Mode 4: parallel bearings are detected', run() {
-      const r = Modes.triangulation([st(270, 1000, { bearing: 0 }), st(90, 1000, { bearing: 0.3 })]);
-      return ok(r.status === 'error' && /parallel/i.test(r.messages.map((m) => m.text).join(' ')) && !r.solutions.length, r.messages.map((m) => m.text).join(' '));
-    } },
-    { name: 'Mode 4: rays meeting behind an observer are reported', run() {
-      const r = Modes.triangulation([B(st(270, 2000), 180), B(st(0, 2000))]);
-      return ok(r.status === 'warning' && /behind/i.test(r.messages.map((m) => m.text).join(' ')), r.messages.map((m) => m.text).join(' '));
-    } },
-    { name: 'Mode 5: mixed (2 radii + 1 bearing)', run() {
-      const r = Modes.mixed([R(st(45, 2500)), R(st(160, 3000)), B(st(280, 3500))]);
-      const s = best(r), e = err(s);
-      return ok(e < 0.05 && r.solutions.length === 1, `error ${e.toFixed(4)} m, ${r.solutions.length} solution(s)`);
-    } },
-    { name: 'Mode 5: polar fix (one point with radius + bearing)', run() {
-      const p = B(R(st(123, 7000)));
-      const r = Modes.mixed([p]), e = err(best(r));
-      return ok(e < 0.05 && r.solutions.length === 1, `error ${e.toFixed(4)} m`);
-    } },
-    { name: 'Mode 5: one radius + one bearing from different points → ambiguity', run() {
-      const r = Modes.mixed([R(st(0, 3000)), B(st(260, 4000))]);
-      const e = Math.min(...r.solutions.map((s) => err(s)));
-      return ok(e < 0.05, `${r.solutions.length} solution(s), closest ${e.toFixed(4)} m from truth`);
-    } },
-    { name: 'Mode 6: Delaunay mesh', run() {
-      const sq = [st(45, 1000), st(135, 1000), st(225, 1000), st(315, 1000)];
-      const a = Modes.delaunay(sq), b = Modes.delaunay([...sq, P(T0)]);
-      const c = Modes.delaunay([st(90, 0), st(90, 1000), st(90, 2000)]);
-      return ok(a.data.triangles === 2 && b.data.triangles === 4 && b.data.edges === 8 && c.status === 'error',
-        `square: ${a.data.triangles} triangles; square+centre: ${b.data.triangles} triangles / ${b.data.edges} edges; collinear: ${c.status}`);
-    } },
     { name: 'Pasting coordinates (decimal, DMS, map links)', run() {
       const exp = { lat: 48.10144, lon: 11.588161 };
       const good = [
@@ -2208,7 +1912,7 @@ const Tests = (() => {
       const pass = !bad.length && south && south.lat < -33.8 && south.lon > 151 && neg && neg.lon === -70.25 && !rejects.length && multi.points.length === 2 && multi.failed.length === 1;
       return ok(pass, `${good.length - bad.length}/${good.length} formats ok${bad.length ? ' (failed: ' + bad.join(' | ') + ')' : ''}; south/west ${south && neg ? 'ok' : 'FAIL'}; invalid rejected ${rejects.length ? 'FAIL: ' + rejects.join(' | ') : 'ok'}; multi-line ${multi.points.length}/${multi.failed.length}`);
     } },
-    { name: 'Mode 7: equal radius (equilateral, two points, obtuse triangle)', run() {
+    { name: 'Mode 4: equal radius (equilateral, two points, obtuse triangle)', run() {
       const a = Modes.equalRadius([st(0, 2000), st(120, 2000), st(240, 2000)]);
       const b = Modes.equalRadius([st(270, 1500), st(90, 1500)]);
       const c = Modes.equalRadius([st(270, 2000), st(90, 2000), st(0, 300)]); // obtuse: centre = midpoint of the long side
@@ -2218,7 +1922,7 @@ const Tests = (() => {
         && ec < 0.01 && near(c.data.radius, 2000, 0.01) && c.data.support.length === 2 && a.areas.length === 3;
       return ok(pass, `equilateral: ${ea.toFixed(4)} m off, r = ${a.data.radius.toFixed(3)} m; two points: ${eb.toFixed(4)} m off; obtuse: ${ec.toFixed(4)} m off, set by ${c.data.support.length} points`);
     } },
-    { name: 'Mode 7: equal radius at 30 km scale with interior points; too few points', run() {
+    { name: 'Mode 4: equal radius at 30 km scale with interior points; too few points', run() {
       const pts = [st(0, 30000), st(120, 30000), st(240, 30000), st(45, 5000), P(T0), st(200, 12000)];
       const r = Modes.equalRadius(pts), e = err(best(r));
       const one = Modes.equalRadius([st(0, 100)]);
@@ -2226,7 +1930,7 @@ const Tests = (() => {
       return ok(e < 0.05 && near(r.data.radius, 30000, 0.05) && near(maxD, r.data.radius, 1e-6) && one.status === 'error',
         `centre ${e.toFixed(4)} m off, r = ${r.data.radius.toFixed(3)} m; single point → ${one.status}`);
     } },
-    { name: 'Mode 7: hide & seek with allowed distance (area contains spot; contradiction detected)', run() {
+    { name: 'Mode 4: hide & seek with allowed distance (area contains spot; contradiction detected)', run() {
       // hiding spot T0; leaks within 1000 m of it
       const leaks = [st(0, 1000), st(130, 800), st(250, 950), st(60, 400)];
       const a = Modes.equalRadius(leaks, { allowedDistance: 1000 });
@@ -2237,18 +1941,25 @@ const Tests = (() => {
       return ok(inside && a.status === 'ok' && b.status === 'warning' && b.solutions[0].kind === 'deviation' && oneInside,
         `R = 1000 m: spot inside area ${inside ? 'yes' : 'NO'} (${a.data.area ? Fmt.area(turf.area(a.data.area)) : '–'}); R = 400 m: ${b.status} (needs ≥ ${Fmt.dist(b.data.radius)}); single leak: ${oneInside ? 'ok' : 'FAIL'}`);
     } },
+    { name: 'Mode 5: Delaunay mesh', run() {
+      const sq = [st(45, 1000), st(135, 1000), st(225, 1000), st(315, 1000)];
+      const a = Modes.delaunay(sq), b = Modes.delaunay([...sq, P(T0)]);
+      const c = Modes.delaunay([st(90, 0), st(90, 1000), st(90, 2000)]);
+      return ok(a.data.triangles === 2 && b.data.triangles === 4 && b.data.edges === 8 && c.status === 'error',
+        `square: ${a.data.triangles} triangles; square+centre: ${b.data.triangles} triangles / ${b.data.edges} edges; collinear: ${c.status}`);
+    } },
     { name: 'Automatic mode selection', run() {
-      const r = st(0, 1000, { radius: 900 }), b = st(90, 1000, { bearing: 270 }), n = st(180, 1000);
-      const cases = [[[r], 'circle'], [[r, r], 'twoCircles'], [[r, r, r], 'trilateration'], [[b, b], 'triangulation'], [[r, b], 'mixed'], [[n, n, n], 'equalRadius'], [[n, n], 'equalRadius'], [[n], null], [[b], null], [[], null]];
+      const r = st(0, 1000, { radius: 900 }), n = st(180, 1000);
+      const cases = [[[r], 'circle'], [[r, r], 'twoCircles'], [[r, r, r], 'trilateration'], [[r, n, n], 'circle'], [[n, n, n], 'equalRadius'], [[n, n], 'equalRadius'], [[n], null], [[], null]];
       const bad = cases.filter(([pts, m]) => autoSelect(pts).mode !== m);
       if (autoSelect([n], { allowedDistance: 500 }).mode !== 'equalRadius') bad.push([[], 'one point + allowed distance']);
       return ok(!bad.length, bad.length ? `wrong for: ${bad.map((c) => c[1]).join(', ')}` : `${cases.length} cases correct`);
     } },
     { name: 'CSV and GeoJSON round trip, decimal comma import', run() {
-      const pts = [{ id: 1, name: 'A, "x"', lat: '48.1', lon: '11.5', radius: '100', sigmaR: '', bearing: '45.5', sigmaB: '2', visible: true },
-        { id: 2, name: 'B', lat: '-33.5', lon: '-70.25', radius: '', sigmaR: '', bearing: '', sigmaB: '', visible: false }];
+      const pts = [{ id: 1, name: 'A, "x"', lat: '48.1', lon: '11.5', radius: '100', sigmaR: '7.5', visible: true },
+        { id: 2, name: 'B', lat: '-33.5', lon: '-70.25', radius: '', sigmaR: '', visible: false }];
       const back = IO.parseCSV(IO.toCSV(pts));
-      const csvOk = back.length === 2 && back[0].name === 'A, "x"' && back[0].bearing === '45.5' && back[1].visible === false && back[1].lon === '-70.25';
+      const csvOk = back.length === 2 && back[0].name === 'A, "x"' && back[0].sigmaR === '7.5' && back[1].visible === false && back[1].lon === '-70.25';
       const semi = IO.parseCSV('Name;Latitude;Longitude;Distance\nX;48,5;11,25;1200,5\n');
       const semiOk = semi.length === 1 && semi[0].lat === '48.5' && semi[0].radius === '1200.5';
       const gj = IO.parseGeoJSON(JSON.stringify(IO.toGeoJSON(pts))).points;
@@ -2257,7 +1968,7 @@ const Tests = (() => {
     } },
     { name: 'Levenberg–Marquardt converges from a poor start value', run() {
       const pts = [R(st(10, 3000)), R(st(130, 2500)), R(st(250, 4000))];
-      const proj = Geo.makeProjection(T0), obs = buildObservations(pts, proj, USE_RADIUS);
+      const proj = Geo.makeProjection(T0), obs = buildObservations(pts, proj);
       const adj = adjust(obs, [25000, -18000]);
       const e = Math.hypot(adj.x, adj.y);
       return ok(adj.converged && e < 0.05, `from 31 km away: error ${e.toFixed(4)} m after ${adj.iterations} iterations`);
