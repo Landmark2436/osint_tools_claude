@@ -17,9 +17,9 @@ from .output import write_all
 from .runner import RunConfig, Runner, parse_module_spec
 
 EPILOG = """examples:
-  selector-recon johndoe42
+  selector-recon mrrobot
   selector-recon user@example.com +12015550123 --out runs/case1
-  selector-recon john.doe --type username --modules wmn,maigret
+  selector-recon alice.ctf --type username --modules wmn,maigret
   selector-recon user@example.com --modules +holehe --pivot 1
   selector-recon --offline user@example.com
 

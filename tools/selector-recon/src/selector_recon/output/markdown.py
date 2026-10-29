@@ -58,7 +58,11 @@ def render_markdown(result: RunResult, include_not_found: bool = False) -> str:
                 *(_row(f) for f in shown),
             ]
         else:
-            lines.append("No positive, blocked or inconclusive results.")
+            sel_runs = [r for r in result.module_runs if r.selector == sel.value]
+            if sel_runs and all(r.state == "skipped" for r in sel_runs):
+                lines.append("No results: every module for this selector was skipped (see Skipped or failed modules).")
+            else:
+                lines.append("No positive, blocked or inconclusive results.")
         if hidden and not include_not_found:
             lines += ["", f"{len(hidden)} source(s) reported not found; see findings.json or report.html."]
         if links:
