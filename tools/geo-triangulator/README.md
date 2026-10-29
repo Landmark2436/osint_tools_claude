@@ -1,8 +1,8 @@
 # Geo Triangulator
 
-Estimates the position, or the possible area, of an unknown target from known WGS84 points with measured **distances (radii)** and/or **bearings**. The result is shown on an OpenStreetMap map with an error ellipse and residuals.
+Estimates the position, or the possible area, of an unknown target from known WGS84 points with measured **distances (radii)** and/or **bearings**. The result is shown on an OpenStreetMap map together with the residuals of every measurement.
 
-**Status:** beta · **Version:** 0.1.3 · **Open:** [`index.html`](index.html)
+**Status:** beta · **Version:** 0.2.0 · **Open:** [`index.html`](index.html)
 
 ## Quick start
 
@@ -24,7 +24,7 @@ An internet connection is required for the CDN libraries (Leaflet, Turf.js) and 
 | **Automatic** (default) | any | Picks one of the modes below from the data and shows which one it used |
 | 1 · One point with radius | 1 point with radius | Circle as possible area, area and circumference |
 | 2 · Two points with radii | exactly 2 points with radius | Intersection area (lens) and both intersection points; if the circles don't meet, a notice and the point of least weighted deviation |
-| 3 · Trilateration | ≥ 3 points with radius | Least-squares estimate with error ellipse, plus the area common to all circles (if one exists) |
+| 3 · Trilateration | ≥ 3 points with radius | Least-squares estimate, plus the area common to all circles (if one exists) |
 | 4 · Triangulation | ≥ 2 points with bearing | Intersection of the bearing rays (least squares for > 2); parallel rays and intersections behind an observer are reported; intersection of the ±2σ bearing cones |
 | 5 · Mixed | ≥ 2 measurements in total (radii + bearings) | Joint weighted adjustment; one point with radius **and** bearing already gives a position (polar fix) |
 | 6 · Delaunay | ≥ 3 distinct points | Triangle mesh of the points (no target estimate) |
@@ -96,23 +96,22 @@ A `FeatureCollection` of `Point` (or `MultiPoint`) features. Point attributes ar
 
 - **Estimated position:** red crosshair marker. Alternative, equally good positions (for example the second intersection point) are shown in purple. Coordinates have a **Copy** button.
 - **Result area:** semi-transparent red: the circle, lens, common area of all circles, or bearing-cone intersection, with its size.
-- **Uncertainty:** 95 % error ellipse (dashed) with semi-axes and orientation, the “95 % radius” (major semi-axis), and σ east/north.
 - **Quality:** number of observations, redundancy, s₀ (a-posteriori standard deviation of unit weight), iterations.
 - **Residuals** per measurement (computed − observed, evaluated on the sphere) with v/σ. |v/σ| > 3 is flagged in red.
-- **Export result (GeoJSON):** estimate(s) with uncertainty and residuals, error ellipses, result areas and the measurement points.
+- **Export result (GeoJSON):** estimate(s) with residuals and s₀, result areas and the measurement points.
 
 ## How it works
 
 - **Local metric projection:** all calculations run in an azimuthal equidistant projection (spherical earth, R = 6 371 008.8 m) centred on the centroid of the points, in metres. After the first solution the projection is **re-centred on the estimate** and the adjustment repeated. Distances from the projection centre are exact, and great circles through it are straight lines, so radii and bearings are then modelled without projection error.
 - **Bearings** are converted to plane azimuths at each observer, which compensates the meridian convergence.
 - **Least squares:** a self-written Levenberg–Marquardt solver minimises Σ(v/σ)² over the two unknowns (east, north). Radius model: ‖X − Pᵢ‖. Bearing model: atan2(Δx, Δy). Start values come from closed-form constructions: linearised trilateration, pairwise circle/circle, ray/ray and ray/circle intersections, and polar fixes. Several starts are tried, so ambiguous geometries return all equally good solutions.
-- **Covariance:** C = max(1, s₀²) · N⁻¹ with N = JᵀWJ. The 95 % ellipse uses χ²(2) = 5.991.
+- **Weights:** each measurement is weighted with 1/σ², so precise measurements count more. σ also makes radii (metres) and bearings (degrees) comparable in mixed mode. s₀ = √(vᵀWv / redundancy) shows whether the measurements agree with their σ.
 - **Mode 2 closed form:** circle intersection a = (r₁² − r₂² + d²)/2d, h = √(r₁² − a²). If the circles don't meet, the point of least weighted deviation lies on the centre line.
 - **Areas** (circles, intersections, bearing cones, Delaunay via `turf.tin`) are computed with Turf.js on geodesic polygons.
 
 ## Limitations
 
-- The result can only be as good as the inputs. Wrong radii, bearings or σ values give wrong positions, and a small error ellipse does not prove correctness.
+- The result can only be as good as the inputs. Wrong radii, bearings or σ values give wrong positions, and small residuals do not prove correctness.
 - Spherical earth model. Accurate to the millimetre level for distances up to a few hundred kilometres; less suitable for continental distances. Not for use across the poles or the ±180° meridian.
 - Map tiles and libraries need an internet connection.
 - **Map tiles and `file://`:** OpenStreetMap's tile servers require an HTTP Referer, i.e. the web address of the requesting page. A file opened by double-click (`file://`) sends none, so the map shows “Access blocked” (see [osm.wiki/Blocked](https://osm.wiki/Blocked)). The page cannot add a Referer itself. Use the tool from a web address instead: the [online version on GitHub Pages](https://landmark2436.github.io/osint_tools_claude/tools/geo-triangulator/) or any web server. Opened locally, the tool shows a notice with that link. All calculations, import/export and the self-test still work without the map background.
@@ -149,6 +148,10 @@ All data stays in your browser (localStorage). The only network requests are the
 | Map tiles | – | [Tile usage policy](https://operations.osmfoundation.org/policies/tiles/) | OpenStreetMap standard tiles (default); optional: OSM Humanitarian (OSM France) |
 
 ## Changelog
+
+### v0.2.0 – 2026-10-29
+
+- Removed the error ellipse and the 95 % uncertainty figures from the map, the result panel and the result GeoJSON export, to keep the output simple. The position calculation is unchanged. Residuals, s₀ and the warnings for contradictory or weak geometry remain.
 
 ### v0.1.3 – 2026-10-29
 

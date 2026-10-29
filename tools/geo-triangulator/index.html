@@ -134,7 +134,6 @@ tr:last-child td { border-bottom: 0; }
 .solution { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; background: var(--panel-2); }
 .solution .title { font-weight: 700; display: flex; align-items: center; gap: 6px; }
 .solution .coords { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; margin: 4px 0; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-.solution .unc { font-size: 12px; color: var(--muted); }
 dl.stats { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 8px 0; font-size: 13px; }
 dl.stats dt { color: var(--muted); }
 dl.stats dd { margin: 0; font-variant-numeric: tabular-nums; }
@@ -297,7 +296,7 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
       <ul>
         <li><b>1 · One radius:</b> the target lies inside (or on) the circle. Area and circumference are shown. One circle cannot fix a position.</li>
         <li><b>2 · Two radii:</b> the lens-shaped intersection area and the two intersection points (the target is at one of them if the radii are exact distances). If the circles don’t meet, the point of least weighted deviation is shown.</li>
-        <li><b>3 · Three or more radii:</b> least-squares estimate (Levenberg–Marquardt) with error ellipse, plus the area common to all circles if there is one.</li>
+        <li><b>3 · Three or more radii:</b> least-squares estimate (Levenberg–Marquardt), plus the area common to all circles if there is one.</li>
         <li><b>4 · Bearings:</b> intersection of the bearing rays; with more than two bearings a least-squares adjustment. Parallel rays and rays meeting behind an observer are reported. The shaded area is the intersection of the ±2σ bearing cones.</li>
         <li><b>5 · Mixed:</b> radii and bearings in one joint, weighted adjustment. A single point with both radius and bearing already gives a position (polar fix).</li>
         <li><b>6 · Delaunay:</b> triangle mesh of the points (no target estimate). Automatic mode uses it when points have neither radius nor bearing.</li>
@@ -305,8 +304,7 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
       <h3>Reading the result</h3>
       <ul>
         <li><b>Red crosshair:</b> estimated position (purple: alternative, equally good solution). The coordinates can be copied.</li>
-        <li><b>Error ellipse (dashed):</b> 95 % confidence region. “95 % radius” is the major semi-axis, i.e. a circle that contains the ellipse.</li>
-        <li><b>s₀</b> (a-posteriori standard deviation of unit weight) ≈ 1 means the measurements agree with their σ. s₀ &gt; 3 indicates contradictory data. The covariance is then scaled by s₀².</li>
+        <li><b>s₀</b> (a-posteriori standard deviation of unit weight) ≈ 1 means the measurements agree with their σ. s₀ &gt; 3 indicates contradictory data.</li>
         <li><b>Residuals</b> are “computed − observed”, evaluated on the sphere. |v/σ| &gt; 3 is flagged in red as a likely outlier.</li>
       </ul>
       <h3>Files</h3>
@@ -329,7 +327,7 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
 /* =====================================================================
  * 1. CONFIGURATION
  * ===================================================================== */
-const APP_VERSION = '0.1.3';
+const APP_VERSION = '0.2.0';
 const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors';
 
@@ -353,7 +351,6 @@ const CONFIG = {
   DEFAULT_SIGMA_B_DEG: 2,             // default bearing σ in degrees
   PARALLEL_LIMIT_DEG: 1,              // bearing lines crossing at less than this count as parallel
   POOR_GEOMETRY_DEG: 15,              // crossing angles below this give a "poor geometry" notice
-  CHI2_2D_95: 5.991464547107979,      // χ²(2 dof, 95 %) for the error ellipse
   WEDGE_K: 2,                         // bearing cone half-width = WEDGE_K · σ
   LM_MAX_ITER: 200,
   LM_TOL_M: 1e-7,                     // stop when the step is shorter than this (metres)
@@ -553,10 +550,10 @@ function costAt(obs, x, y) { return evalNormal(obs, x, y).cost; }
  * grows (towards a short gradient-descent step). This makes the solver robust
  * against bad start values and strongly non-linear geometry.
  *
- * Covariance of the estimate: C = s²·N⁻¹ with N evaluated at the solution.
- * With redundancy (dof = n − 2 > 0) the a-posteriori variance factor
- * s0² = vᵀWv / dof is estimated; we scale by max(1, s0²) so that the
- * reported uncertainty is never more optimistic than the a-priori σ.
+ * Quality measures: with redundancy (dof = n − 2 > 0) the a-posteriori standard
+ * deviation of unit weight s0 = √(vᵀWv / dof) shows whether the measurements
+ * agree with their σ. If the normal matrix N is (nearly) singular at the
+ * solution, the position is not determined in every direction ("degenerate").
  */
 function adjust(obs, start) {
   let x = start[0], y = start[1];
@@ -580,38 +577,8 @@ function adjust(obs, start) {
   const n = obs.length, dof = n - 2;
   const eig = LinAlg.eigSym2(cur.n11, cur.n12, cur.n22);
   const degenerate = !(eig.l1 > 0) || eig.l2 <= 1e-10 * eig.l1;
-  let cov = null;
   const s0 = dof > 0 ? Math.sqrt(cur.cost / dof) : null;
-  if (!degenerate) {
-    const det = cur.n11 * cur.n22 - cur.n12 * cur.n12;
-    const vf = dof > 0 ? Math.max(1, cur.cost / dof) : 1;
-    cov = { xx: vf * cur.n22 / det, xy: -vf * cur.n12 / det, yy: vf * cur.n11 / det };
-  }
-  return { x, y, cost: cur.cost, iterations, converged, dof, s0, degenerate, cov, nObs: n };
-}
-
-/** 95 % error ellipse from a 2×2 covariance (x = east, y = north). */
-function errorEllipse(cov) {
-  const e = LinAlg.eigSym2(cov.xx, cov.xy, cov.yy);
-  const k = Math.sqrt(CONFIG.CHI2_2D_95);
-  const a95 = k * Math.sqrt(Math.max(e.l1, 0)), b95 = k * Math.sqrt(Math.max(e.l2, 0));
-  return {
-    a95, b95, radius95: a95,
-    angleRad: e.angle,
-    azimuthDeg: Geo.norm360(90 - e.angle * R2D) % 180, // orientation of the major axis from north
-    sigmaE: Math.sqrt(cov.xx), sigmaN: Math.sqrt(cov.yy),
-  };
-}
-function ellipseRing(proj, cx, cy, e, steps = 72) {
-  if (!(e.a95 > 0) || e.a95 > 3e6) return null;
-  const ux = Math.cos(e.angleRad), uy = Math.sin(e.angleRad), ring = [];
-  for (let i = 0; i <= steps; i++) {
-    const t = (2 * Math.PI * i) / steps, ca = e.a95 * Math.cos(t), sb = e.b95 * Math.sin(t);
-    const ll = proj.inverse(cx + ca * ux - sb * uy, cy + ca * uy + sb * ux);
-    ring.push([ll.lon, ll.lat]);
-  }
-  ring[steps] = ring[0];
-  return ring;
+  return { x, y, cost: cur.cost, iterations, converged, dof, s0, degenerate, nObs: n };
 }
 
 /* ---------- Closed-form plane constructions (used as start values) ---------- */
@@ -835,15 +802,10 @@ function msg(res, level, text) {
   return res;
 }
 function makeSolution(label, rc, extra) {
-  const sol = Object.assign({ label, kind: 'estimate', lat: rc.lat, lon: rc.lon, ellipse: null, residuals: computeResiduals(rc.obs, rc), adjustment: null }, extra || {});
+  const sol = Object.assign({ label, kind: 'estimate', lat: rc.lat, lon: rc.lon, residuals: computeResiduals(rc.obs, rc), adjustment: null }, extra || {});
   if (rc.adj) {
     const a = rc.adj;
     sol.adjustment = { iterations: a.iterations, converged: a.converged, cost: a.cost, dof: a.dof, s0: a.s0, degenerate: a.degenerate, nObs: a.nObs };
-    if (a.cov) {
-      const e = errorEllipse(a.cov);
-      e.ring = ellipseRing(rc.proj, a.x, a.y, e);
-      sol.ellipse = e;
-    }
   }
   return sol;
 }
@@ -856,7 +818,7 @@ function checkAdjustment(res, sol) {
   const a = sol.adjustment;
   if (!a) return;
   if (!a.converged) msg(res, 'warning', 'The adjustment did not fully converge – treat the result with caution.');
-  if (a.degenerate) msg(res, 'warning', 'The geometry is degenerate (measurements do not constrain the position in every direction) – no error ellipse can be computed.');
+  if (a.degenerate) msg(res, 'warning', 'Weak geometry: the measurements do not fix the position in every direction (e.g. circles that only touch). Treat the result with caution.');
   if (a.s0 !== null && a.s0 > CONFIG.INCONSISTENT_S0) {
     msg(res, 'warning', `The measurements contradict each other (s₀ = ${a.s0.toFixed(2)}, expected ≈ 1). Check the values and their σ; suspicious residuals are flagged in red.`);
   }
@@ -1445,13 +1407,9 @@ const IO = {
     for (const s of result.solutions) {
       features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [s.lon, s.lat] }, properties: Object.assign({
         role: s.kind, label: s.label, lat: s.lat, lon: s.lon,
-        radius95_m: s.ellipse ? s.ellipse.radius95 : null,
-        ellipse95_semi_major_m: s.ellipse ? s.ellipse.a95 : null, ellipse95_semi_minor_m: s.ellipse ? s.ellipse.b95 : null,
-        ellipse_azimuth_deg: s.ellipse ? s.ellipse.azimuthDeg : null,
         s0: s.adjustment ? s.adjustment.s0 : null,
         residuals: s.residuals.map((r) => ({ point: r.name, type: r.type, observed: r.observed, computed: r.computed, residual: r.residual, unit: r.unit })),
       }, meta) });
-      if (s.ellipse && s.ellipse.ring) features.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [s.ellipse.ring] }, properties: Object.assign({ role: 'error_ellipse_95', label: s.label }, meta) });
     }
     for (const a of result.areas) features.push({ type: 'Feature', geometry: a.feature.geometry, properties: Object.assign({ role: a.kind === 'mesh' ? 'triangle' : 'area', label: a.label, area_m2: a.areaM2 }, meta) });
     for (const p of activePoints) features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [p.lon, p.lat] }, properties: { role: 'measurement_point', name: p.name, radius_m: p.radius, sigma_radius_m: p.sigmaR, bearing_deg: p.bearing, sigma_bearing_deg: p.sigmaB } });
@@ -1597,15 +1555,9 @@ const MapView = {
       L.geoJSON(a.feature, { style }).bindTooltip(`${UI.esc(a.label)}<br>${Fmt.area(a.areaM2)}`, { sticky: true }).addTo(this.resultLayer);
     }
     result.solutions.forEach((s) => {
-      if (s.ellipse && s.ellipse.ring) {
-        L.polygon(s.ellipse.ring.map((c) => [c[1], c[0]]), { color: s.kind === 'alternative' ? '#9c36b5' : '#c2255c', weight: 2, dashArray: '4 4', fillOpacity: 0.12 })
-          .bindTooltip(`95 % error ellipse: ${Fmt.dist(s.ellipse.a95)} × ${Fmt.dist(s.ellipse.b95)}`, { sticky: true }).addTo(this.resultLayer);
-      }
-    });
-    result.solutions.forEach((s) => {
       const alt = s.kind === 'alternative';
       const m = L.marker([s.lat, s.lon], { icon: L.divIcon({ className: '', html: `<div class="target-marker${alt ? ' alt' : ''}"></div>`, iconSize: [30, 30], iconAnchor: [15, 15] }), zIndexOffset: 1000, keyboard: false });
-      m.bindPopup(`<b>${UI.esc(s.label)}</b><br>${Fmt.latlon(s.lat, s.lon)}${s.ellipse ? `<br>95 % radius: ${Fmt.dist(s.ellipse.radius95)}` : ''}`);
+      m.bindPopup(`<b>${UI.esc(s.label)}</b><br>${Fmt.latlon(s.lat, s.lon)}`);
       m.addTo(this.resultLayer);
     });
   },
@@ -1883,16 +1835,13 @@ const UI = {
 
     const sols = result ? result.solutions : [];
     $('#solutions').innerHTML = sols.map((s) => {
-      const c = Fmt.latlon(s.lat, s.lon), e = s.ellipse;
+      const c = Fmt.latlon(s.lat, s.lon);
       const badge = s.kind === 'estimate' ? '<span class="badge ok">estimate</span>' : s.kind === 'alternative' ? '<span class="badge warn">alternative</span>' : '<span class="badge err">best fit, no intersection</span>';
       return `<div class="solution">
         <div class="title">${this.esc(s.label)} ${badge}</div>
         <div class="coords"><span>${c}</span>
           <button type="button" class="small" data-copy="${c}" title="Copy coordinates">Copy</button>
           <button type="button" class="small" data-zoom="${s.lat},${s.lon}" title="Zoom to this position">Zoom</button></div>
-        <div class="unc">${e
-          ? `95 % radius: <b>${Fmt.dist(e.radius95)}</b> · error ellipse (95 %): ${Fmt.dist(e.a95)} × ${Fmt.dist(e.b95)}, major axis ${e.azimuthDeg.toFixed(1)}° from north · σ east/north: ${Fmt.dist(e.sigmaE)} / ${Fmt.dist(e.sigmaN)}`
-          : 'No error ellipse (the geometry does not determine the uncertainty).'}</div>
       </div>`;
     }).join('');
 
@@ -2038,13 +1987,13 @@ const Tests = (() => {
     { name: 'Mode 3: trilateration with exact distances', run() {
       const r = Modes.trilateration([R(st(10, 3000)), R(st(130, 2500)), R(st(250, 4000)), R(st(300, 1500))]);
       const s = best(r), e = err(s);
-      return ok(e < 0.01 && r.solutions.length === 1 && s.ellipse, `error ${e.toFixed(5)} m, ${s.adjustment.iterations} iterations, 95 % radius ${Fmt.dist(s.ellipse.radius95)}`);
+      return ok(e < 0.01 && r.solutions.length === 1, `error ${e.toFixed(5)} m, ${s.adjustment.iterations} iterations`);
     } },
     { name: 'Mode 3: trilateration with noise (σ = 20 m)', run() {
       const off = [15, -22, 9, -12, 25];
       const pts = [10, 80, 150, 220, 300].map((b, i) => R(st(b, 2000 + 500 * i, { sigmaR: 20 }), off[i]));
       const r = Modes.trilateration(pts), s = best(r), e = err(s);
-      return ok(e < 40 && s.ellipse && s.adjustment.s0 < 3 && e < 2 * s.ellipse.radius95, `error ${e.toFixed(1)} m, s0 = ${s.adjustment.s0.toFixed(2)}, 95 % radius ${Fmt.dist(s.ellipse.radius95)}`);
+      return ok(e < 40 && s.adjustment.s0 < 3, `error ${e.toFixed(1)} m, s0 = ${s.adjustment.s0.toFixed(2)}`);
     } },
     { name: 'Mode 3: common area of all circles contains the target', run() {
       const pts = [R(st(10, 3000), 300), R(st(130, 2500), 250), R(st(250, 4000), 400)];
@@ -2065,7 +2014,7 @@ const Tests = (() => {
     { name: 'Mode 4: two bearings intersect at the target', run() {
       const r = Modes.triangulation([B(st(200, 4000)), B(st(95, 3000))]);
       const s = best(r), e = err(s);
-      return ok(e < 0.05 && s.ellipse, `error ${e.toFixed(4)} m, 95 % radius ${Fmt.dist(s.ellipse.radius95)}`);
+      return ok(e < 0.05 && !s.adjustment.degenerate, `error ${e.toFixed(4)} m`);
     } },
     { name: 'Mode 4: three noisy bearings → least squares', run() {
       const r = Modes.triangulation([B(st(200, 4000), 0.5), B(st(95, 3000), -0.4), B(st(330, 3500), 0.3)]);
