@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "selector-recon"
+version = "0.1.0"
+description = "Passive OSINT lookups for email addresses, phone numbers, usernames, domains and IPs, with paste-ready evidence."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "landmark2436" }]
+keywords = ["osint", "ctf", "username", "email", "phone"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Environment :: Console",
+    "Topic :: Security",
+]
+dependencies = [
+    "httpx>=0.28,<0.29",
+    "phonenumbers>=9.0,<10",
+    "dnspython>=2.7,<3",
+]
+
+[project.optional-dependencies]
+sherlock = ["sherlock-project>=0.16.2,<0.17"]
+maigret = ["maigret>=0.6.6,<0.7"]
+all = ["selector-recon[sherlock,maigret]"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+selector-recon = "selector_recon.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/landmark2436/osint_tools_claude/tree/main/tools/selector-recon"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+selector_recon = ["data/*.txt", "data/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

@@ -1,0 +1,16 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.coverage
+
+# Run output (samples/ is committed on purpose)
+out/
+runs/
+
+# Secrets: .env is ignored by the repository root .gitignore, the example is not
+!.env.example

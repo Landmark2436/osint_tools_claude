@@ -1,0 +1,10 @@
+# Pinned versions this release was tested with. Install with:
+#   pip install -r requirements.txt && pip install --no-deps -e .
+httpx==0.28.1
+phonenumbers==9.0.42
+dnspython==2.9.0
+# optional username engines
+sherlock-project==0.16.2
+maigret==0.6.6
+# tests
+pytest==8.4.2
