@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OSINT Tools</title>
+<meta name="description" content="A collection of self-contained, browser-based OSINT tools built with Claude Code.">
+<meta name="color-scheme" content="light dark">
+<style>
+:root {
+  --bg: #f4f6f9; --card: #ffffff; --text: #1b2430; --muted: #5d6a7a; --border: #dce2e9; --accent: #2563eb; --tag-bg: #e8f0fe;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0f141a; --card: #171e27; --text: #e3e8ef; --muted: #98a4b3; --border: #2b3542; --accent: #7aa7f7; --tag-bg: #15233d; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Arial, sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 40px 16px 56px; }
+h1 { font-size: 30px; margin: 0 0 6px; }
+.lead { color: var(--muted); margin: 0 0 32px; }
+.tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; list-style: none; padding: 0; margin: 0; }
+.tool { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; }
+.tool h2 { font-size: 19px; margin: 0; }
+.tool h2 a { color: var(--text); text-decoration: none; }
+.tool h2 a:hover, .tool h2 a:focus-visible { color: var(--accent); }
+.tool p { margin: 0; color: var(--muted); font-size: 15px; flex: 1; }
+.meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+.tag { background: var(--tag-bg); color: var(--accent); padding: 1px 8px; border-radius: 999px; font-weight: 600; }
+.links { display: flex; gap: 14px; font-size: 14px; }
+.links a { color: var(--accent); font-weight: 600; }
+footer { margin-top: 40px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--border); padding-top: 16px; }
+footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>OSINT Tools</h1>
+  <p class="lead">Self-contained browser tools for open-source research, built with Claude Code. Each tool is a single HTML file: no installation, no backend, and your data stays in your browser.</p>
+
+  <ul class="tools">
+    <li class="tool">
+      <h2><a href="tools/geo-triangulator/index.html">Geo Triangulator</a></h2>
+      <p>Estimate a target's position or possible area from points with distances (radii) and/or bearings, using least-squares adjustment on an OpenStreetMap map.</p>
+      <div class="meta"><span class="tag">beta</span><span>v0.1.0</span></div>
+      <div class="links"><a href="tools/geo-triangulator/index.html">Open tool →</a><a href="tools/geo-triangulator/README.md">Documentation</a></div>
+    </li>
+  </ul>
+
+  <footer>
+    <p><b>Responsible use:</b> these tools are meant for lawful research using publicly available information. You are responsible for complying with applicable laws and for respecting the privacy of others.</p>
+    <p>See the repository <a href="README.md">README</a> and <a href="LICENSE">LICENSE</a>. No tracking, no analytics.</p>
+  </footer>
+</main>
+</body>
+</html>

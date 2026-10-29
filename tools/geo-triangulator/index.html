@@ -1,0 +1,2013 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Geo Triangulator</title>
+<meta name="description" content="Estimate the position or possible area of an unknown target from distances (radii) and bearings measured at known WGS84 points.">
+<meta name="color-scheme" content="light dark">
+
+<!-- Library load bookkeeping: lets the app show a clear error instead of a blank page. -->
+<script>window.__libErrors = [];</script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"
+      crossorigin="anonymous" referrerpolicy="no-referrer">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"
+        crossorigin="anonymous" referrerpolicy="no-referrer"
+        onerror="window.__libErrors.push('Leaflet 1.9.4 (cdnjs.cloudflare.com)')"></script>
+<script src="https://unpkg.com/@turf/turf@7.1.0/turf.min.js"
+        crossorigin="anonymous"
+        onerror="window.__libErrors.push('Turf.js 7.1.0 (unpkg.com)')"></script>
+
+<style>
+/* ======================= Theme tokens ======================= */
+:root {
+  --bg: #eef1f5; --panel: #ffffff; --panel-2: #f6f8fa; --text: #1b2430; --muted: #5d6a7a;
+  --border: #d9dfe6; --accent: #2563eb; --accent-text: #ffffff; --input-bg: #ffffff;
+  --ok: #1f8a45; --warn: #b26b00; --err: #cc2b2b; --info: #2563eb;
+  --ok-bg: #e7f6ec; --warn-bg: #fff4e0; --err-bg: #fdeaea; --info-bg: #e8f0fe;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141a; --panel: #171e27; --panel-2: #1d2530; --text: #e3e8ef; --muted: #98a4b3;
+    --border: #2b3542; --accent: #5b93f5; --accent-text: #0b1220; --input-bg: #0f151c;
+    --ok: #4cc27a; --warn: #f0a63a; --err: #f07070; --info: #7aa7f7;
+    --ok-bg: #12301f; --warn-bg: #33260f; --err-bg: #3a1717; --info-bg: #15233d;
+    --shadow: none; color-scheme: dark;
+  }
+  :root:not([data-theme="light"]) .tiles-filterable { filter: brightness(.75) invert(1) contrast(.9) hue-rotate(200deg) saturate(.35) brightness(1.1); }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141a; --panel: #171e27; --panel-2: #1d2530; --text: #e3e8ef; --muted: #98a4b3;
+  --border: #2b3542; --accent: #5b93f5; --accent-text: #0b1220; --input-bg: #0f151c;
+  --ok: #4cc27a; --warn: #f0a63a; --err: #f07070; --info: #7aa7f7;
+  --ok-bg: #12301f; --warn-bg: #33260f; --err-bg: #3a1717; --info-bg: #15233d;
+  --shadow: none; color-scheme: dark;
+}
+:root[data-theme="dark"] .tiles-filterable { filter: brightness(.75) invert(1) contrast(.9) hue-rotate(200deg) saturate(.35) brightness(1.1); }
+
+/* ======================= Layout ======================= */
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.topbar {
+  display: flex; align-items: center; gap: 12px; padding: 8px 16px; min-height: 52px;
+  background: var(--panel); border-bottom: 1px solid var(--border);
+}
+.topbar h1 { font-size: 17px; margin: 0; letter-spacing: .2px; }
+.topbar .sub { color: var(--muted); font-size: 13px; }
+.topbar .spacer { flex: 1; }
+.layout {
+  flex: 1; min-height: 0; display: grid;
+  grid-template-columns: minmax(380px, 500px) 1fr;
+}
+.panel { overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; border-right: 1px solid var(--border); }
+#map { min-height: 300px; height: 100%; background: var(--panel-2); }
+@media (max-width: 860px) {
+  body { display: block; height: auto; }
+  .layout { display: flex; flex-direction: column; }
+  #map { order: -1; height: 55vh; height: 55dvh; }
+  .panel { overflow: visible; border-right: 0; padding: 12px 16px 24px; }
+  .topbar .sub { display: none; }
+}
+
+/* ======================= Components ======================= */
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px; box-shadow: var(--shadow); }
+.card h2 { font-size: 14px; margin: 0; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+.card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.card-head .grow { flex: 1; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; }
+button, select, input[type="text"] {
+  font: inherit; color: var(--text); background: var(--input-bg);
+  border: 1px solid var(--border); border-radius: 7px;
+}
+button { padding: 6px 10px; cursor: pointer; background: var(--panel-2); white-space: nowrap; }
+button:hover { border-color: var(--accent); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+button.danger { color: var(--err); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button.small { padding: 2px 8px; font-size: 12px; }
+select { padding: 6px 8px; }
+.field { display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
+.field select { font-weight: normal; }
+label.toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+.muted { color: var(--muted); }
+.hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+.mode-used { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--border); }
+
+/* Points table */
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; }
+#pointsTable { width: max-content; min-width: 100%; }
+th, td { padding: 4px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+th { font-size: 11px; color: var(--muted); font-weight: 600; background: var(--panel-2); white-space: nowrap; position: sticky; top: 0; }
+tr:last-child td { border-bottom: 0; }
+#pointsTable input[type="text"] { padding: 4px 5px; font-size: 13px; }
+#pointsTable input.w-name { width: 60px; }
+#pointsTable input.w-coord { width: 96px; }
+#pointsTable input.w-num { width: 66px; }
+#pointsTable input.w-sig { width: 48px; }
+#pointsTable td.idx { font-size: 11px; color: var(--muted); text-align: center; width: 20px; }
+#pointsTable input.invalid { border-color: var(--err); background: var(--err-bg); }
+#pointsTable tr.hl td { background: var(--info-bg); }
+#pointsTable tr.hidden-row input[type="text"] { opacity: .5; }
+#pointsTable tr.empty td { color: var(--muted); padding: 12px; text-align: center; }
+.icon-btn { padding: 2px 7px; line-height: 1.2; }
+
+/* Results */
+.msgs { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.msgs li { padding: 7px 10px; border-radius: 7px; border-left: 4px solid; font-size: 13px; }
+.msgs .info { background: var(--info-bg); border-color: var(--info); }
+.msgs .warning { background: var(--warn-bg); border-color: var(--warn); }
+.msgs .error { background: var(--err-bg); border-color: var(--err); }
+.msgs .success { background: var(--ok-bg); border-color: var(--ok); }
+.solution { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; background: var(--panel-2); }
+.solution .title { font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.solution .coords { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; margin: 4px 0; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.solution .unc { font-size: 12px; color: var(--muted); }
+dl.stats { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 8px 0; font-size: 13px; }
+dl.stats dt { color: var(--muted); }
+dl.stats dd { margin: 0; font-variant-numeric: tabular-nums; }
+table.res td, table.res th { font-size: 12px; font-variant-numeric: tabular-nums; }
+table.res td.num { text-align: right; }
+.flag { color: var(--err); font-weight: 700; }
+.badge { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+.badge.ok { background: var(--ok-bg); color: var(--ok); }
+.badge.fail { background: var(--err-bg); color: var(--err); }
+.badge.warn { background: var(--warn-bg); color: var(--warn); }
+.badge.err { background: var(--err-bg); color: var(--err); }
+
+/* Help */
+details.help summary { cursor: pointer; font-weight: 700; }
+details.help h3 { font-size: 14px; margin: 14px 0 4px; }
+details.help p, details.help li { font-size: 13px; }
+details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4px; }
+
+/* Fatal error and toast */
+#fatal { margin: 24px auto; max-width: 720px; padding: 18px 20px; border-radius: 10px; background: var(--err-bg); border: 1px solid var(--err); color: var(--text); }
+#fatal h2 { margin-top: 0; color: var(--err); }
+#toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--text); color: var(--panel); padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 2000; max-width: 90vw; }
+#toast.show { opacity: .95; }
+
+/* Map markers */
+.pt-marker { width: 26px; height: 26px; border-radius: 50%; background: #1c64d6; color: #fff; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.45); font: 700 12px/22px system-ui, sans-serif; text-align: center; }
+.pt-marker.sel { background: #e8590c; }
+.target-marker { width: 30px; height: 30px; border-radius: 50%; border: 3px solid #e03131; background: rgba(224,49,49,.25); box-shadow: 0 0 0 3px rgba(255,255,255,.85); position: relative; }
+.target-marker::before, .target-marker::after { content: ""; position: absolute; background: #e03131; }
+.target-marker::before { left: 50%; top: -9px; bottom: -9px; width: 2px; margin-left: -1px; }
+.target-marker::after { top: 50%; left: -9px; right: -9px; height: 2px; margin-top: -1px; }
+.target-marker.alt { border-color: #9c36b5; background: rgba(156,54,181,.2); }
+.target-marker.alt::before, .target-marker.alt::after { background: #9c36b5; }
+.target-label { font: 700 11px system-ui, sans-serif; color: #e03131; text-shadow: 0 0 3px #fff, 0 0 3px #fff; white-space: nowrap; }
+.leaflet-container { font: 12px/1.4 system-ui, sans-serif; }
+.leaflet-tooltip.pt-tip { font-weight: 600; }
+:root[data-theme="dark"] .leaflet-bar a, :root[data-theme="dark"] .leaflet-control-layers { background: var(--panel); color: var(--text); border-color: var(--border); }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <h1>🎯 Geo Triangulator</h1>
+  <span class="sub">Radii · Bearings · Least squares · OpenStreetMap</span>
+  <span class="spacer"></span>
+  <button id="btnTheme" type="button" title="Switch colour theme">Theme: Auto</button>
+</header>
+
+<div id="fatal" hidden></div>
+
+<main class="layout" id="app">
+  <section class="panel" aria-label="Controls">
+    <!-- Mode -->
+    <div class="card">
+      <label class="field">Calculation mode
+        <select id="modeSelect">
+          <option value="auto">Automatic (recommended)</option>
+          <option value="circle">1 · One point with radius (circle)</option>
+          <option value="twoCircles">2 · Two radii (intersection lens)</option>
+          <option value="trilateration">3 · Three or more radii (trilateration)</option>
+          <option value="triangulation">4 · Bearings (triangulation)</option>
+          <option value="mixed">5 · Mixed radii + bearings</option>
+          <option value="delaunay">6 · Delaunay triangle mesh</option>
+        </select>
+      </label>
+      <div class="mode-used" id="modeUsed">–</div>
+    </div>
+
+    <!-- Points -->
+    <div class="card">
+      <div class="card-head"><h2>Measurement points</h2><span class="grow"></span><span class="muted" id="pointCount"></span></div>
+      <div class="toolbar">
+        <label class="toggle"><input type="checkbox" id="clickAdd" checked> Add point on map click</label>
+      </div>
+      <div class="toolbar">
+        <button id="btnAddRow" type="button">+ Add row</button>
+        <select id="exampleSelect" aria-label="Load example">
+          <option value="">Load example…</option>
+          <option value="circle">1 · One circle</option>
+          <option value="two">2 · Two circles</option>
+          <option value="tri">3 · Trilateration (4 radii)</option>
+          <option value="bearings">4 · Triangulation (3 bearings)</option>
+          <option value="mixed">5 · Mixed (radii + bearing)</option>
+          <option value="mesh">6 · Delaunay mesh</option>
+        </select>
+        <button id="btnFit" type="button" title="Zoom to all points and results">Fit map</button>
+        <button id="btnClear" type="button" class="danger">Clear all</button>
+      </div>
+      <div class="table-wrap">
+        <table id="pointsTable">
+          <thead><tr>
+            <th title="Show on map and use in calculation">👁</th>
+            <th>#</th>
+            <th>Name</th>
+            <th>Lat (°)</th>
+            <th>Lon (°)</th>
+            <th title="Measured distance from this point to the target, in metres">Radius (m)</th>
+            <th title="Standard deviation of the radius in metres (optional)">σ r (m)</th>
+            <th title="Bearing from this point towards the target, degrees clockwise from true north">Bearing (°)</th>
+            <th title="Standard deviation of the bearing in degrees (optional)">σ b (°)</th>
+            <th></th>
+          </tr></thead>
+          <tbody id="pointsBody"></tbody>
+        </table>
+      </div>
+      <p class="hint">Drag markers to move points. Empty σ → defaults (radius: <span id="hintSigR"></span>, bearing: <span id="hintSigB"></span>). Hidden points are ignored.</p>
+      <div class="toolbar">
+        <button id="btnImport" type="button">Import CSV / GeoJSON</button>
+        <input type="file" id="fileInput" accept=".csv,.txt,.geojson,.json,text/csv,application/geo+json,application/json" hidden>
+        <button id="btnExportCsv" type="button">Export CSV</button>
+        <button id="btnExportGeo" type="button">Export GeoJSON</button>
+      </div>
+    </div>
+
+    <!-- Result -->
+    <div class="card" id="resultCard">
+      <div class="card-head">
+        <h2>Result</h2><span class="grow"></span>
+        <button id="btnFitResult" type="button" class="small">Zoom to result</button>
+        <button id="btnExportResult" type="button" class="small">Export result (GeoJSON)</button>
+      </div>
+      <ul class="msgs" id="messages"></ul>
+      <div id="solutions"></div>
+      <dl class="stats" id="stats"></dl>
+      <div id="residuals"></div>
+    </div>
+
+    <!-- Self-test -->
+    <div class="card">
+      <div class="card-head"><h2>Self-test</h2><span class="grow"></span><button id="btnTests" type="button" class="primary">Run tests</button></div>
+      <div id="testResults" class="muted">Runs known test cases for every mode with synthetic measurements and checks the results.</div>
+    </div>
+
+    <!-- Help -->
+    <details class="card help" id="help">
+      <summary>Help &amp; user guide</summary>
+      <h3>Quick start</h3>
+      <ol>
+        <li>Add measurement points: click on the map (toggle “Add point on map click”), use “+ Add row”, import a file, or load an example.</li>
+        <li>For each point enter a <b>radius</b> (distance to the target in metres) and/or a <b>bearing</b> (direction to the target in degrees, clockwise from true north, 0 = north, 90 = east).</li>
+        <li>Optionally enter uncertainties (σ = one standard deviation). They weight the measurements in the adjustment.</li>
+        <li>The result updates automatically. In “Automatic” mode the app picks the matching method and shows which one it used.</li>
+      </ol>
+      <h3>Modes</h3>
+      <ul>
+        <li><b>1 · One radius:</b> the target lies inside (or on) the circle. Area and circumference are shown. One circle cannot fix a position.</li>
+        <li><b>2 · Two radii:</b> the lens-shaped intersection area and the two intersection points (the target is at one of them if the radii are exact distances). If the circles don’t meet, the point of least weighted deviation is shown.</li>
+        <li><b>3 · Three or more radii:</b> least-squares estimate (Levenberg–Marquardt) with error ellipse, plus the area common to all circles if there is one.</li>
+        <li><b>4 · Bearings:</b> intersection of the bearing rays; with more than two bearings a least-squares adjustment. Parallel rays and rays meeting behind an observer are reported. The shaded area is the intersection of the ±2σ bearing cones.</li>
+        <li><b>5 · Mixed:</b> radii and bearings in one joint, weighted adjustment. A single point with both radius and bearing already gives a position (polar fix).</li>
+        <li><b>6 · Delaunay:</b> triangle mesh of the points (no target estimate). Automatic mode uses it when points have neither radius nor bearing.</li>
+      </ul>
+      <h3>Reading the result</h3>
+      <ul>
+        <li><b>Red crosshair:</b> estimated position (purple: alternative, equally good solution). The coordinates can be copied.</li>
+        <li><b>Error ellipse (dashed):</b> 95 % confidence region. “95 % radius” is the major semi-axis, i.e. a circle that contains the ellipse.</li>
+        <li><b>s₀</b> (a-posteriori standard deviation of unit weight) ≈ 1 means the measurements agree with their σ. s₀ &gt; 3 indicates contradictory data. The covariance is then scaled by s₀².</li>
+        <li><b>Residuals</b> are “computed − observed”, evaluated on the sphere. |v/σ| &gt; 3 is flagged in red as a likely outlier.</li>
+      </ul>
+      <h3>Files</h3>
+      <p>CSV with a header line, separated by <code>,</code> <code>;</code> or tab: <code>name,lat,lon,radius_m,sigma_radius_m,bearing_deg,sigma_bearing_deg,visible</code>. Common alternatives (<code>latitude</code>, <code>lng</code>, <code>distance</code>, <code>azimuth</code>…) are recognised; empty cells are allowed. With <code>;</code> as separator a decimal comma is accepted.<br>
+      GeoJSON: Point features; the same names are read from <code>properties</code>.</p>
+      <h3>Notes &amp; limits</h3>
+      <ul>
+        <li>Calculations run on a spherical earth (R = 6371 km) in a local azimuthal equidistant projection. Accuracy is excellent up to several hundred kilometres; don’t use it across the poles or the ±180° meridian.</li>
+        <li>Everything runs locally in your browser; inputs are stored only in this browser’s localStorage. Nothing is uploaded except map tile requests.</li>
+        <li>If the map shows “Access blocked / Referer required”, the OpenStreetMap tile server is refusing requests from a local file. Choose another base map with the layer button (top right of the map), or put the file on a web server.</li>
+      </ul>
+    </details>
+  </section>
+  <div id="map" role="region" aria-label="Map"></div>
+</main>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+'use strict';
+/* =====================================================================
+ * 1. CONFIGURATION
+ * ===================================================================== */
+const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors';
+
+// Alternative base maps (all based on OpenStreetMap data). Useful if the
+// standard OSM tile server refuses requests from file:// pages.
+const ALT_TILE_LAYERS = [
+  { name: 'OSM Humanitarian', url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', subdomains: 'abc', maxZoom: 19, filterable: true,
+    attribution: TILE_ATTRIBUTION + ', tiles by <a href="https://www.hotosm.org/" target="_blank" rel="noopener">HOT</a> / OSM France' },
+  { name: 'CARTO Voyager', url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', subdomains: 'abcd', maxZoom: 20, filterable: true,
+    attribution: TILE_ATTRIBUTION + ' &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>' },
+  { name: 'CARTO Dark Matter', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', subdomains: 'abcd', maxZoom: 20, filterable: false,
+    attribution: TILE_ATTRIBUTION + ' &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>' },
+];
+
+const CONFIG = {
+  STORAGE_KEY: 'geoTriangulator.v1',
+  EARTH_RADIUS_M: 6371008.8,          // mean earth radius (IUGG)
+  DEFAULT_VIEW: { lat: 48.1374, lon: 11.5755, zoom: 5 },
+  DEFAULT_SIGMA_R_REL: 0.02,          // default radius σ = 2 % of the radius …
+  DEFAULT_SIGMA_R_MIN_M: 5,           // … but at least 5 m
+  DEFAULT_SIGMA_B_DEG: 2,             // default bearing σ in degrees
+  PARALLEL_LIMIT_DEG: 1,              // bearing lines crossing at less than this count as parallel
+  POOR_GEOMETRY_DEG: 15,              // crossing angles below this give a "poor geometry" notice
+  CHI2_2D_95: 5.991464547107979,      // χ²(2 dof, 95 %) for the error ellipse
+  WEDGE_K: 2,                         // bearing cone half-width = WEDGE_K · σ
+  LM_MAX_ITER: 200,
+  LM_TOL_M: 1e-7,                     // stop when the step is shorter than this (metres)
+  MAX_STARTS: 8,                      // number of start values tried in the adjustment
+  CIRCLE_STEPS: 128,                  // polygon vertices for circles
+  INCONSISTENT_S0: 3,                 // s0 above this → data reported as contradictory
+  OUTLIER_NORM: 3,                    // |v/σ| above this → residual flagged
+  RECALC_DEBOUNCE_MS: 120,
+};
+
+const MODE_LABELS = {
+  auto: 'Automatic',
+  circle: '1 · One radius (circle)',
+  twoCircles: '2 · Two radii (intersection lens)',
+  trilateration: '3 · Trilateration (least squares)',
+  triangulation: '4 · Triangulation (bearings)',
+  mixed: '5 · Mixed radii + bearings (joint adjustment)',
+  delaunay: '6 · Delaunay triangle mesh',
+};
+
+/* =====================================================================
+ * 2. GEOMETRY / MATH  (pure functions, no DOM access)
+ * ===================================================================== */
+const D2R = Math.PI / 180, R2D = 180 / Math.PI;
+const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+const hasRadius = (p) => isNum(p.radius) && p.radius > 0;
+const hasBearing = (p) => isNum(p.bearing);
+
+/**
+ * Spherical earth helpers. All angles in degrees at the interface, metres for distances.
+ */
+const Geo = {
+  R: CONFIG.EARTH_RADIUS_M,
+  wrapPi(a) { return a - 2 * Math.PI * Math.round(a / (2 * Math.PI)); },
+  wrap180(a) { return a - 360 * Math.round(a / 360); },
+  norm360(a) { return ((a % 360) + 360) % 360; },
+
+  /** Great-circle distance (haversine, numerically stable for short distances). */
+  distance(a, b) {
+    const f1 = a.lat * D2R, f2 = b.lat * D2R, df = f2 - f1, dl = (b.lon - a.lon) * D2R;
+    const h = Math.sin(df / 2) ** 2 + Math.cos(f1) * Math.cos(f2) * Math.sin(dl / 2) ** 2;
+    return 2 * Geo.R * Math.atan2(Math.sqrt(h), Math.sqrt(Math.max(0, 1 - h)));
+  },
+  /** Initial great-circle bearing from a to b, degrees clockwise from north [0, 360). */
+  bearing(a, b) {
+    const f1 = a.lat * D2R, f2 = b.lat * D2R, dl = (b.lon - a.lon) * D2R;
+    const y = Math.sin(dl) * Math.cos(f2);
+    const x = Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(dl);
+    return Geo.norm360(Math.atan2(y, x) * R2D);
+  },
+  /** Destination after travelling `dist` metres from p along initial bearing `brg`. */
+  destination(p, brg, dist) {
+    const d = dist / Geo.R, t = brg * D2R, f1 = p.lat * D2R, l1 = p.lon * D2R;
+    const f2 = Math.asin(Math.sin(f1) * Math.cos(d) + Math.cos(f1) * Math.sin(d) * Math.cos(t));
+    const l2 = l1 + Math.atan2(Math.sin(t) * Math.sin(d) * Math.cos(f1), Math.cos(d) - Math.sin(f1) * Math.sin(f2));
+    return { lat: f2 * R2D, lon: Geo.wrap180(l2 * R2D) };
+  },
+  /** Sampled great-circle path (for drawing bearing lines). */
+  path(p, brg, dist, n = 48) {
+    const out = [];
+    for (let i = 0; i <= n; i++) out.push(Geo.destination(p, brg, (dist * i) / n));
+    return out;
+  },
+  /** Centroid as normalised mean of unit vectors (works across the antimeridian). */
+  centroid(points) {
+    let x = 0, y = 0, z = 0;
+    for (const p of points) {
+      const f = p.lat * D2R, l = p.lon * D2R;
+      x += Math.cos(f) * Math.cos(l); y += Math.cos(f) * Math.sin(l); z += Math.sin(f);
+    }
+    if (Math.hypot(x, y, z) < 1e-12) return { lat: points[0].lat, lon: points[0].lon };
+    return { lat: Math.atan2(z, Math.hypot(x, y)) * R2D, lon: Math.atan2(y, x) * R2D };
+  },
+  /** Area and perimeter of a spherical cap ("circle" of radius r on the sphere). */
+  capArea(r) { return 2 * Math.PI * Geo.R * Geo.R * (1 - Math.cos(r / Geo.R)); },
+  capCircumference(r) { return 2 * Math.PI * Geo.R * Math.sin(r / Geo.R); },
+
+  /**
+   * Azimuthal equidistant projection (spherical) centred on `center`.
+   * Distances and directions measured FROM the centre are exact; great circles
+   * through the centre are straight lines. x = east, y = north, metres.
+   * We compute the angular distance c with atan2(sin c, cos c) instead of acos
+   * to stay accurate at the millimetre level for short distances.
+   */
+  makeProjection(center) {
+    const f0 = center.lat * D2R, l0 = center.lon * D2R;
+    const sf0 = Math.sin(f0), cf0 = Math.cos(f0), R = Geo.R;
+    return {
+      center: { lat: center.lat, lon: center.lon },
+      forward(lat, lon) {
+        const f = lat * D2R, dl = lon * D2R - l0;
+        const sf = Math.sin(f), cf = Math.cos(f), cdl = Math.cos(dl);
+        const X = cf * Math.sin(dl);
+        const Y = cf0 * sf - sf0 * cf * cdl;
+        const cosc = sf0 * sf + cf0 * cf * cdl;
+        const sinc = Math.hypot(X, Y);
+        const c = Math.atan2(sinc, cosc);
+        const k = sinc < 1e-15 ? 1 : c / sinc;
+        return [R * k * X, R * k * Y];
+      },
+      inverse(x, y) {
+        const rho = Math.hypot(x, y);
+        if (rho < 1e-9) return { lat: center.lat, lon: center.lon };
+        const c = rho / R, sc = Math.sin(c), cc = Math.cos(c);
+        const f = Math.asin(Math.max(-1, Math.min(1, cc * sf0 + (y * sc * cf0) / rho)));
+        const l = l0 + Math.atan2(x * sc, rho * cf0 * cc - y * sf0 * sc);
+        return { lat: f * R2D, lon: Geo.wrap180(l * R2D) };
+      },
+    };
+  },
+};
+
+/** Tiny 2×2 linear algebra. */
+const LinAlg = {
+  /** Solve [a b; c d]·[x;y] = [e;f]; returns null if (numerically) singular. */
+  solve2(a, b, c, d, e, f) {
+    const det = a * d - b * c, scale = Math.abs(a * d) + Math.abs(b * c);
+    if (!Number.isFinite(det) || det === 0 || Math.abs(det) <= 1e-14 * scale) return null;
+    return [(e * d - b * f) / det, (a * f - c * e) / det];
+  },
+  /** Eigen decomposition of a symmetric 2×2 matrix; angle = direction of l1 from +x axis. */
+  eigSym2(xx, xy, yy) {
+    const m = (xx + yy) / 2, r = Math.hypot((xx - yy) / 2, xy);
+    return { l1: m + r, l2: m - r, angle: 0.5 * Math.atan2(2 * xy, xx - yy) };
+  },
+};
+
+/* ---------- Observations & least-squares adjustment ---------- */
+const USE_RADIUS = { radius: true, bearing: false };
+const USE_BEARING = { radius: false, bearing: true };
+const USE_BOTH = { radius: true, bearing: true };
+
+function sigmaRadius(p) {
+  return isNum(p.sigmaR) && p.sigmaR > 0 ? p.sigmaR : Math.max(CONFIG.DEFAULT_SIGMA_R_MIN_M, CONFIG.DEFAULT_SIGMA_R_REL * p.radius);
+}
+function sigmaBearingDeg(p) {
+  return isNum(p.sigmaB) && p.sigmaB > 0 ? p.sigmaB : CONFIG.DEFAULT_SIGMA_B_DEG;
+}
+
+/**
+ * Convert measurement points into observations in the local plane.
+ * A bearing (true north based, on the sphere) is converted into a plane
+ * azimuth by projecting a point 10 m along the geodesic: this removes the
+ * meridian convergence of the projection.
+ */
+function buildObservations(points, proj, use) {
+  const obs = [];
+  for (const p of points) {
+    const [px, py] = proj.forward(p.lat, p.lon);
+    if (use.radius && hasRadius(p)) {
+      obs.push({ type: 'radius', pid: p.id, name: p.name, point: p, px, py, value: p.radius, sigma: sigmaRadius(p) });
+    }
+    if (use.bearing && hasBearing(p)) {
+      const q = Geo.destination(p, p.bearing, 10);
+      const [qx, qy] = proj.forward(q.lat, q.lon);
+      obs.push({ type: 'bearing', pid: p.id, name: p.name, point: p, px, py,
+        value: Math.atan2(qx - px, qy - py), bearingDeg: Geo.norm360(p.bearing), sigma: sigmaBearingDeg(p) * D2R });
+    }
+  }
+  return obs;
+}
+
+/**
+ * Observation model at plane position (x, y):
+ *   radius : f = sqrt((x-xi)² + (y-yi)²)        ∂f/∂x = (x-xi)/D, ∂f/∂y = (y-yi)/D
+ *   bearing: f = atan2(x-xi, y-yi)  (azimuth)    ∂f/∂x = (y-yi)/D², ∂f/∂y = -(x-xi)/D²
+ * Residual = f − observed (bearings wrapped to (−π, π]).
+ */
+function obsModel(o, x, y) {
+  const dx = x - o.px, dy = y - o.py;
+  if (o.type === 'radius') {
+    const D = Math.hypot(dx, dy);
+    if (D < 1e-9) return { res: -o.value, jx: 0, jy: 0 };
+    return { res: D - o.value, jx: dx / D, jy: dy / D };
+  }
+  const D2 = Math.max(dx * dx + dy * dy, 1e-9);
+  return { res: Geo.wrapPi(Math.atan2(dx, dy) - o.value), jx: dy / D2, jy: -dx / D2 };
+}
+
+/** Weighted sum of squared residuals Σ (v/σ)², plus normal matrix N = JᵀWJ and gradient g = JᵀWv. */
+function evalNormal(obs, x, y) {
+  let cost = 0, n11 = 0, n12 = 0, n22 = 0, g1 = 0, g2 = 0;
+  for (const o of obs) {
+    const m = obsModel(o, x, y), w = 1 / (o.sigma * o.sigma);
+    cost += w * m.res * m.res;
+    n11 += w * m.jx * m.jx; n12 += w * m.jx * m.jy; n22 += w * m.jy * m.jy;
+    g1 += w * m.jx * m.res; g2 += w * m.jy * m.res;
+  }
+  return { cost, n11, n12, n22, g1, g2 };
+}
+function costAt(obs, x, y) { return evalNormal(obs, x, y).cost; }
+
+/**
+ * Levenberg–Marquardt adjustment for the 2 unknowns (x, y).
+ * Each iteration solves (N + λ·diag(N))·δ = −g. A step is accepted only if the
+ * weighted cost decreases; then λ shrinks (towards Gauss–Newton), otherwise λ
+ * grows (towards a short gradient-descent step). This makes the solver robust
+ * against bad start values and strongly non-linear geometry.
+ *
+ * Covariance of the estimate: C = s²·N⁻¹ with N evaluated at the solution.
+ * With redundancy (dof = n − 2 > 0) the a-posteriori variance factor
+ * s0² = vᵀWv / dof is estimated; we scale by max(1, s0²) so that the
+ * reported uncertainty is never more optimistic than the a-priori σ.
+ */
+function adjust(obs, start) {
+  let x = start[0], y = start[1];
+  let cur = evalNormal(obs, x, y);
+  let lambda = 1e-3, iterations = 0, converged = false;
+  for (; iterations < CONFIG.LM_MAX_ITER; iterations++) {
+    const a = cur.n11 * (1 + lambda) + 1e-15, d = cur.n22 * (1 + lambda) + 1e-15, b = cur.n12;
+    const step = LinAlg.solve2(a, b, b, d, -cur.g1, -cur.g2);
+    if (!step) { lambda *= 10; if (lambda > 1e16) break; continue; }
+    const nx = x + step[0], ny = y + step[1];
+    const next = evalNormal(obs, nx, ny);
+    if (Number.isFinite(next.cost) && next.cost <= cur.cost) {
+      x = nx; y = ny; cur = next;
+      lambda = Math.max(lambda / 10, 1e-15);
+      if (Math.hypot(step[0], step[1]) < CONFIG.LM_TOL_M) { converged = true; iterations++; break; }
+    } else {
+      lambda *= 10;
+      if (lambda > 1e16) { converged = true; break; } // no descent possible → at a minimum
+    }
+  }
+  const n = obs.length, dof = n - 2;
+  const eig = LinAlg.eigSym2(cur.n11, cur.n12, cur.n22);
+  const degenerate = !(eig.l1 > 0) || eig.l2 <= 1e-10 * eig.l1;
+  let cov = null;
+  const s0 = dof > 0 ? Math.sqrt(cur.cost / dof) : null;
+  if (!degenerate) {
+    const det = cur.n11 * cur.n22 - cur.n12 * cur.n12;
+    const vf = dof > 0 ? Math.max(1, cur.cost / dof) : 1;
+    cov = { xx: vf * cur.n22 / det, xy: -vf * cur.n12 / det, yy: vf * cur.n11 / det };
+  }
+  return { x, y, cost: cur.cost, iterations, converged, dof, s0, degenerate, cov, nObs: n };
+}
+
+/** 95 % error ellipse from a 2×2 covariance (x = east, y = north). */
+function errorEllipse(cov) {
+  const e = LinAlg.eigSym2(cov.xx, cov.xy, cov.yy);
+  const k = Math.sqrt(CONFIG.CHI2_2D_95);
+  const a95 = k * Math.sqrt(Math.max(e.l1, 0)), b95 = k * Math.sqrt(Math.max(e.l2, 0));
+  return {
+    a95, b95, radius95: a95,
+    angleRad: e.angle,
+    azimuthDeg: Geo.norm360(90 - e.angle * R2D) % 180, // orientation of the major axis from north
+    sigmaE: Math.sqrt(cov.xx), sigmaN: Math.sqrt(cov.yy),
+  };
+}
+function ellipseRing(proj, cx, cy, e, steps = 72) {
+  if (!(e.a95 > 0) || e.a95 > 3e6) return null;
+  const ux = Math.cos(e.angleRad), uy = Math.sin(e.angleRad), ring = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = (2 * Math.PI * i) / steps, ca = e.a95 * Math.cos(t), sb = e.b95 * Math.sin(t);
+    const ll = proj.inverse(cx + ca * ux - sb * uy, cy + ca * uy + sb * ux);
+    ring.push([ll.lon, ll.lat]);
+  }
+  ring[steps] = ring[0];
+  return ring;
+}
+
+/* ---------- Closed-form plane constructions (used as start values) ---------- */
+
+/** Intersection of two circles in the plane. */
+function circleCircle(x1, y1, r1, x2, y2, r2) {
+  const dx = x2 - x1, dy = y2 - y1, d = Math.hypot(dx, dy), eps = 1e-9 * (r1 + r2);
+  if (d < 1e-9) return { type: Math.abs(r1 - r2) <= eps ? 'identical' : 'concentric', points: [], d };
+  if (d > r1 + r2 + eps) return { type: 'separate', points: [], d, gap: d - r1 - r2 };
+  if (d < Math.abs(r1 - r2) - eps) return { type: 'contained', points: [], d, gap: Math.abs(r1 - r2) - d };
+  // a = distance from centre 1 to the chord, h = half chord length
+  const a = (r1 * r1 - r2 * r2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, r1 * r1 - a * a));
+  const ux = dx / d, uy = dy / d, mx = x1 + a * ux, my = y1 + a * uy;
+  if (h < 1e-6 * Math.max(r1, r2)) return { type: 'tangent', points: [[mx, my]], d };
+  return { type: 'intersect', points: [[mx - h * uy, my + h * ux], [mx + h * uy, my - h * ux]], d };
+}
+/** Plane area of the lens = intersection of two disks (circular segment formula). */
+function lensArea(r1, r2, d) {
+  if (d >= r1 + r2) return 0;
+  if (d <= Math.abs(r1 - r2)) return Math.PI * Math.min(r1, r2) ** 2;
+  const a1 = Math.acos(Math.max(-1, Math.min(1, (d * d + r1 * r1 - r2 * r2) / (2 * d * r1))));
+  const a2 = Math.acos(Math.max(-1, Math.min(1, (d * d + r2 * r2 - r1 * r1) / (2 * d * r2))));
+  const k = (-d + r1 + r2) * (d + r1 - r2) * (d - r1 + r2) * (d + r1 + r2);
+  return r1 * r1 * a1 + r2 * r2 * a2 - 0.5 * Math.sqrt(Math.max(0, k));
+}
+/**
+ * Intersection of two bearing rays Pi + ti·di and Pj + tj·dj (di = (sin α, cos α)).
+ * Solving Pi + ti·di = Pj + tj·dj with 2-D cross products (a×b = ax·by − ay·bx):
+ *   ti = ((Pj−Pi)×dj)/(di×dj),  tj = ((Pj−Pi)×di)/(di×dj).
+ * ti, tj < 0 means the lines meet behind the observer.
+ */
+function rayRay(o1, o2) {
+  const d1x = Math.sin(o1.value), d1y = Math.cos(o1.value), d2x = Math.sin(o2.value), d2y = Math.cos(o2.value);
+  const cross = d1x * d2y - d1y * d2x;
+  const angleDeg = Math.asin(Math.min(1, Math.abs(cross))) * R2D;
+  const wx = o2.px - o1.px, wy = o2.py - o1.py;
+  if (angleDeg < CONFIG.PARALLEL_LIMIT_DEG) {
+    const offset = Math.abs(wx * d1y - wy * d1x); // distance of P2 from line 1
+    const facing = d1x * d2x + d1y * d2y < 0 && (wx * d1x + wy * d1y) > 0;
+    return { parallel: true, angleDeg, offset, facing };
+  }
+  const t1 = (wx * d2y - wy * d2x) / cross, t2 = (wx * d1y - wy * d1x) / cross;
+  return { parallel: false, angleDeg, x: o1.px + t1 * d1x, y: o1.py + t1 * d1y, t1, t2 };
+}
+/** Intersections of a bearing ray with a circle: |P + t·d − C|² = r², t ≥ 0. */
+function rayCircle(ob, orad) {
+  const dx = Math.sin(ob.value), dy = Math.cos(ob.value);
+  const px = ob.px - orad.px, py = ob.py - orad.py;
+  const B = dx * px + dy * py, C = px * px + py * py - orad.value * orad.value, disc = B * B - C;
+  if (disc < 0) return [];
+  const s = Math.sqrt(disc);
+  return [-B - s, -B + s].filter((t) => t > 0).map((t) => [ob.px + t * dx, ob.py + t * dy]);
+}
+/**
+ * Linearised trilateration: subtracting circle equation 0 from equation i removes
+ * the quadratic terms:  2(xi−x0)·x + 2(yi−y0)·y = r0² − ri² + xi² − x0² + yi² − y0².
+ * Solved in the least-squares sense; gives a good start value for LM.
+ */
+function linearTrilateration(obsR) {
+  if (obsR.length < 3) return null;
+  const o0 = obsR[0];
+  let a11 = 0, a12 = 0, a22 = 0, b1 = 0, b2 = 0;
+  for (let i = 1; i < obsR.length; i++) {
+    const o = obsR[i];
+    const ax = 2 * (o.px - o0.px), ay = 2 * (o.py - o0.py);
+    const rhs = o0.value ** 2 - o.value ** 2 + o.px ** 2 - o0.px ** 2 + o.py ** 2 - o0.py ** 2;
+    a11 += ax * ax; a12 += ax * ay; a22 += ay * ay; b1 += ax * rhs; b2 += ay * rhs;
+  }
+  return LinAlg.solve2(a11, a12, a12, a22, b1, b2);
+}
+/** Point minimising the sum of squared perpendicular distances to all bearing lines: Σ(I − d·dᵀ)(X − Pi) = 0. */
+function linearLines(obsB) {
+  let a11 = 0, a12 = 0, a22 = 0, b1 = 0, b2 = 0;
+  for (const o of obsB) {
+    const dx = Math.sin(o.value), dy = Math.cos(o.value);
+    const m11 = 1 - dx * dx, m12 = -dx * dy, m22 = 1 - dy * dy;
+    a11 += m11; a12 += m12; a22 += m22;
+    b1 += m11 * o.px + m12 * o.py; b2 += m12 * o.px + m22 * o.py;
+  }
+  return LinAlg.solve2(a11, a12, a12, a22, b1, b2);
+}
+
+/** Collect start values from all closed-form constructions available for the observations. */
+function generateStarts(obs) {
+  const R = obs.filter((o) => o.type === 'radius'), B = obs.filter((o) => o.type === 'bearing');
+  const starts = [];
+  const push = (p) => { if (p && Number.isFinite(p[0]) && Number.isFinite(p[1])) starts.push(p); };
+  for (const b of B) { // polar fix: same point has radius and bearing
+    const r = R.find((q) => q.pid === b.pid);
+    if (r) push([b.px + r.value * Math.sin(b.value), b.py + r.value * Math.cos(b.value)]);
+  }
+  push(linearTrilateration(R));
+  const lim = 40;
+  for (let i = 0; i < Math.min(R.length, lim); i++) for (let j = i + 1; j < Math.min(R.length, lim); j++) {
+    const a = R[i], c = R[j], cc = circleCircle(a.px, a.py, a.value, c.px, c.py, c.value);
+    cc.points.forEach(push);
+    if (cc.type === 'separate' || cc.type === 'contained') { // closest point on the centre line
+      const dx = c.px - a.px, dy = c.py - a.py, d = Math.hypot(dx, dy) || 1;
+      const t = cc.type === 'separate' ? (a.value + d - c.value) / 2 : (a.value + d + c.value) / 2;
+      push([a.px + (t * dx) / d, a.py + (t * dy) / d]);
+    }
+  }
+  for (let i = 0; i < Math.min(B.length, lim); i++) for (let j = i + 1; j < Math.min(B.length, lim); j++) {
+    const rr = rayRay(B[i], B[j]);
+    if (!rr.parallel && rr.t1 > 0 && rr.t2 > 0) push([rr.x, rr.y]);
+  }
+  for (const b of B) for (const r of R) rayCircle(b, r).forEach(push);
+  if (B.length >= 2) push(linearLines(B));
+  if (obs.length) push([obs.reduce((s, o) => s + o.px, 0) / obs.length, obs.reduce((s, o) => s + o.py, 0) / obs.length]);
+  for (const b of B) { // a point down each ray, in case nothing else exists
+    const L = R.length ? Math.max(...R.map((r) => r.value)) : 1000;
+    push([b.px + L * Math.sin(b.value), b.py + L * Math.cos(b.value)]);
+  }
+  return starts;
+}
+
+/** Multi-start LM: run the adjustment from the best start values and return distinct minima, best first. */
+function solveLSQ(obs, starts) {
+  if (!starts.length) starts = [[0, 0]];
+  const spread = Math.max(1, ...obs.map((o) => Math.hypot(o.px, o.py)));
+  const minSep = Math.max(1, 1e-3 * spread);
+  const ranked = starts.map((s) => ({ s, c: costAt(obs, s[0], s[1]) }))
+    .filter((r) => Number.isFinite(r.c)).sort((a, b) => a.c - b.c);
+  const chosen = [];
+  for (const r of ranked) {
+    if (chosen.length >= CONFIG.MAX_STARTS) break;
+    if (!chosen.some((c) => Math.hypot(c.s[0] - r.s[0], c.s[1] - r.s[1]) < minSep)) chosen.push(r);
+  }
+  const sols = [];
+  for (const { s } of chosen) {
+    const adj = adjust(obs, s);
+    if (!Number.isFinite(adj.cost)) continue;
+    const dup = sols.findIndex((q) => Math.hypot(q.x - adj.x, q.y - adj.y) < 1);
+    if (dup < 0) sols.push(adj); else if (adj.cost < sols[dup].cost) sols[dup] = adj;
+  }
+  return sols.sort((a, b) => a.cost - b.cost);
+}
+
+/**
+ * Re-centre the projection on the current estimate and adjust again. In an
+ * azimuthal equidistant projection distances from the centre are exact and the
+ * geodesic from an observer to the centre is a straight line, so after
+ * re-centring both observation types are modelled without projection error.
+ */
+function recenter(points, use, start) {
+  let cur = { lat: start.lat, lon: start.lon }, proj = null, obs = null, adj = null;
+  for (let k = 0; k < 4; k++) {
+    proj = Geo.makeProjection(cur);
+    obs = buildObservations(points, proj, use);
+    adj = adjust(obs, [0, 0]);
+    const next = proj.inverse(adj.x, adj.y), moved = Geo.distance(cur, next);
+    if (moved < 1e-4) break;
+    cur = next;
+  }
+  const ll = proj.inverse(adj.x, adj.y);
+  return { lat: ll.lat, lon: ll.lon, proj, obs, adj };
+}
+
+/** Full least-squares pipeline: start values → LM → re-centring → equally good alternatives. */
+function lsqMulti(points, use) {
+  const proj = Geo.makeProjection(Geo.centroid(points));
+  const obs = buildObservations(points, proj, use);
+  const planeSols = solveLSQ(obs, generateStarts(obs));
+  if (!planeSols.length) return [];
+  const best = planeSols[0].cost;
+  const keep = planeSols.filter((s, i) => i === 0 || s.cost <= best + Math.max(1e-4, 0.01 * best)).slice(0, 4);
+  const refined = keep.map((s) => recenter(points, use, proj.inverse(s.x, s.y)));
+  const out = [];
+  for (const r of refined.sort((a, b) => a.adj.cost - b.adj.cost)) {
+    if (!out.some((q) => Geo.distance(q, r) < 1)) out.push(r);
+  }
+  return out;
+}
+
+/** Residuals "computed − observed" evaluated on the sphere (independent of the projection). */
+function computeResiduals(obs, ll) {
+  return obs.map((o) => {
+    if (o.type === 'radius') {
+      const computed = Geo.distance(o.point, ll), v = computed - o.value;
+      return { pid: o.pid, name: o.name, type: 'radius', unit: 'm', observed: o.value, computed, residual: v, sigma: o.sigma, norm: v / o.sigma };
+    }
+    const computed = Geo.bearing(o.point, ll), v = Geo.wrap180(computed - o.bearingDeg), sd = o.sigma * R2D;
+    return { pid: o.pid, name: o.name, type: 'bearing', unit: '°', observed: o.bearingDeg, computed, residual: v, sigma: sd, norm: v / sd };
+  });
+}
+
+/* ---------- Turf helpers (polygons on the sphere) ---------- */
+function turfCircle(p, r) {
+  return turf.circle([p.lon, p.lat], r / 1000, { steps: CONFIG.CIRCLE_STEPS, units: 'kilometers' });
+}
+function turfIntersect(a, b) {
+  try { return turf.intersect(turf.featureCollection([a, b])); }  // Turf ≥ 7
+  catch (e) { try { return turf.intersect(a, b); } catch (e2) { return null; } } // Turf 6 fallback
+}
+function intersectAll(polys) {
+  if (!polys.length) return null;
+  let acc = polys[0];
+  for (let i = 1; i < polys.length && acc; i++) acc = turfIntersect(acc, polys[i]);
+  return acc || null;
+}
+/** Bearing cone: apex at the observer, opening ±half degrees, length L (geodesic). */
+function wedgePolygon(p, brg, halfDeg, L) {
+  const half = Math.min(halfDeg, 80), n = Math.max(4, Math.ceil((2 * half) / 2));
+  const ring = [[p.lon, p.lat]];
+  for (let i = 0; i <= n; i++) {
+    const q = Geo.destination(p, brg - half + (2 * half * i) / n, L);
+    ring.push([q.lon, q.lat]);
+  }
+  ring.push([p.lon, p.lat]);
+  return turf.polygon([ring]);
+}
+
+/* ---------- Result object helpers ---------- */
+function newResult(mode) {
+  return { mode, label: MODE_LABELS[mode], status: 'ok', messages: [], solutions: [], areas: [], stats: [], data: {} };
+}
+function msg(res, level, text) {
+  res.messages.push({ level, text });
+  if (level === 'error') res.status = 'error';
+  else if (level === 'warning' && res.status !== 'error') res.status = 'warning';
+  return res;
+}
+function makeSolution(label, rc, extra) {
+  const sol = Object.assign({ label, kind: 'estimate', lat: rc.lat, lon: rc.lon, ellipse: null, residuals: computeResiduals(rc.obs, rc), adjustment: null }, extra || {});
+  if (rc.adj) {
+    const a = rc.adj;
+    sol.adjustment = { iterations: a.iterations, converged: a.converged, cost: a.cost, dof: a.dof, s0: a.s0, degenerate: a.degenerate, nObs: a.nObs };
+    if (a.cov) {
+      const e = errorEllipse(a.cov);
+      e.ring = ellipseRing(rc.proj, a.x, a.y, e);
+      sol.ellipse = e;
+    }
+  }
+  return sol;
+}
+function noteIgnored(res, points, kind) {
+  const n = points.filter(kind === 'bearing' ? hasBearing : hasRadius).length;
+  if (n) msg(res, 'info', `${n} ${kind === 'bearing' ? 'bearing(s) are' : 'radius value(s) are'} ignored in this mode. Use “Mixed” or “Automatic” to include them.`);
+}
+/** Consistency checks shared by all adjustment modes. */
+function checkAdjustment(res, sol) {
+  const a = sol.adjustment;
+  if (!a) return;
+  if (!a.converged) msg(res, 'warning', 'The adjustment did not fully converge – treat the result with caution.');
+  if (a.degenerate) msg(res, 'warning', 'The geometry is degenerate (measurements do not constrain the position in every direction) – no error ellipse can be computed.');
+  if (a.s0 !== null && a.s0 > CONFIG.INCONSISTENT_S0) {
+    msg(res, 'warning', `The measurements contradict each other (s₀ = ${a.s0.toFixed(2)}, expected ≈ 1). Check the values and their σ; suspicious residuals are flagged in red.`);
+  }
+  const out = sol.residuals.filter((r) => Math.abs(r.norm) > CONFIG.OUTLIER_NORM);
+  if (out.length && (a.dof > 0 || out.some((r) => r.type === 'bearing' && Math.abs(r.residual) > 90))) {
+    msg(res, 'warning', `Large residuals (|v/σ| > ${CONFIG.OUTLIER_NORM}) at: ${[...new Set(out.map((r) => r.name))].join(', ')}.`);
+  }
+}
+function addAdjustmentStats(res, sol) {
+  const a = sol.adjustment;
+  if (!a) return;
+  res.stats.push(['Observations / unknowns', `${a.nObs} / 2 (redundancy ${Math.max(0, a.dof)})`]);
+  res.stats.push(['s₀ (std. dev. of unit weight)', a.s0 === null ? '– (no redundancy)' : a.s0.toFixed(3)]);
+  res.stats.push(['Iterations', `${a.iterations}${a.converged ? '' : ' (not converged)'}`]);
+}
+
+/* =====================================================================
+ * 2b. MODES — each one a pure function: points[] → result
+ *     point = {id, name, lat, lon, radius|null, sigmaR|null, bearing|null, sigmaB|null}
+ * ===================================================================== */
+const Modes = {
+  /**
+   * Mode 1 — one radius. On the sphere the "circle" is a spherical cap:
+   *   area = 2πR²(1 − cos(r/R)),  circumference = 2πR·sin(r/R).
+   */
+  circle(points) {
+    const res = newResult('circle');
+    const pr = points.filter(hasRadius);
+    if (pr.length !== 1) return msg(res, 'error', `Mode 1 needs exactly one point with a radius (found ${pr.length}).`);
+    const p = pr[0], poly = turfCircle(p, p.radius);
+    poly.properties = { label: `Possible area around ${p.name}` };
+    const area = Geo.capArea(p.radius), circ = Geo.capCircumference(p.radius);
+    res.areas.push({ feature: poly, kind: 'area', label: `Possible area around ${p.name}`, areaM2: area });
+    res.data = { area, circumference: circ, polygonArea: turf.area(poly) };
+    res.stats.push(['Centre', Fmt.latlon(p.lat, p.lon)], ['Radius', Fmt.dist(p.radius)], ['Area', Fmt.area(area)], ['Circumference', Fmt.dist(circ)]);
+    msg(res, 'info', 'One radius cannot fix a position: the target lies inside the circle (radius = maximum distance) or on its edge (radius = measured distance). Add a second radius or a bearing.');
+    if (hasBearing(p)) msg(res, 'info', 'This point also has a bearing – “Mixed” mode would give a direct position (polar fix).');
+    return res;
+  },
+
+  /**
+   * Mode 2 — two radii. Plane circle intersection:
+   *   a = (r1² − r2² + d²)/(2d), h = √(r1² − a²), X = P1 + a·u ± h·u⊥.
+   * Lens area (disk ∩ disk) via the circular-segment formula, polygon via Turf.
+   * No intersection → point of least weighted deviation on the centre line:
+   *   minimise w1(t − r1)² + w2(d − t − r2)²  ⇒  t = (w1·r1 + w2·(d − r2))/(w1 + w2)
+   *   (analogous for one circle inside the other), w = 1/σ².
+   */
+  twoCircles(points) {
+    const res = newResult('twoCircles');
+    const pr = points.filter(hasRadius);
+    if (pr.length !== 2) return msg(res, 'error', `Mode 2 needs exactly two points with a radius (found ${pr.length}).`);
+    noteIgnored(res, points, 'bearing');
+    const proj = Geo.makeProjection(Geo.centroid(pr));
+    const [o1, o2] = buildObservations(pr, proj, USE_RADIUS);
+    const cc = circleCircle(o1.px, o1.py, o1.value, o2.px, o2.py, o2.value);
+    const dCent = Geo.distance(pr[0], pr[1]);
+    res.data.relation = cc.type;
+    const relText = { intersect: 'intersecting (2 points)', tangent: 'touching (1 point)', separate: 'separate – no intersection', contained: 'one inside the other', concentric: 'concentric', identical: 'identical' };
+    res.stats.push(['Distance between centres', Fmt.dist(dCent)], ['Circles', relText[cc.type]]);
+    if (cc.type === 'identical') return msg(res, 'error', 'Both circles are identical – every point on the circle is equally possible.');
+    if (cc.type === 'concentric') return msg(res, 'error', 'The circles are concentric and different – they never intersect, and no unique point of least deviation exists.');
+
+    // Disk intersection (lens) – also meaningful when one circle lies inside the other
+    if (cc.type !== 'separate') {
+      const lens = intersectAll([turfCircle(pr[0], pr[0].radius), turfCircle(pr[1], pr[1].radius)]);
+      const analytic = lensArea(o1.value, o2.value, cc.d);
+      res.data.lensArea = analytic;
+      if (lens) {
+        const label = cc.type === 'contained' ? 'Intersection area (the smaller circle)' : 'Intersection area (lens)';
+        res.areas.push({ feature: lens, kind: 'area', label, areaM2: turf.area(lens) });
+        res.data.lensPolygonArea = turf.area(lens);
+      }
+      res.stats.push(['Intersection area', Fmt.area(analytic)]);
+    }
+
+    if (cc.type === 'intersect' || cc.type === 'tangent') {
+      res.data.intersections = [];
+      cc.points.forEach((pt, i) => {
+        const rc = recenter(pr, USE_RADIUS, proj.inverse(pt[0], pt[1]));
+        const sol = makeSolution(cc.points.length > 1 ? `Intersection point ${'AB'[i]}` : 'Touching point', rc, { kind: i === 0 ? 'estimate' : 'alternative' });
+        res.solutions.push(sol);
+        res.data.intersections.push({ lat: sol.lat, lon: sol.lon });
+      });
+      if (cc.type === 'intersect') {
+        msg(res, 'info', 'Two intersection points: if the radii are exact distances the target is at A or B (this cannot be decided from two circles – add a third radius or a bearing). If the radii are maximum distances, the target is inside the lens.');
+      } else {
+        msg(res, 'info', 'The circles touch in a single point. The position is poorly determined perpendicular to the centre line.');
+      }
+      return res;
+    }
+
+    // No intersection → point of least deviation
+    const w1 = 1 / o1.sigma ** 2, w2 = 1 / o2.sigma ** 2, d = cc.d;
+    const ux = (o2.px - o1.px) / d, uy = (o2.py - o1.py) / d;
+    let X;
+    if (cc.type === 'separate') {
+      const t = (w1 * o1.value + w2 * (d - o2.value)) / (w1 + w2);
+      X = [o1.px + t * ux, o1.py + t * uy];
+      msg(res, 'warning', `The circles do not intersect (gap ${Fmt.dist(cc.gap)}). The measurements are contradictory – showing the point of least weighted deviation instead.`);
+    } else if (o1.value >= o2.value) {
+      const t = (w1 * o1.value + w2 * (d + o2.value)) / (w1 + w2);
+      X = [o1.px + t * ux, o1.py + t * uy];
+      msg(res, 'warning', `Circle ${o2.name} lies completely inside circle ${o1.name} (gap ${Fmt.dist(cc.gap)}). As exact distances they are contradictory – showing the point of least weighted deviation.`);
+    } else {
+      const t = (w2 * o2.value + w1 * (d + o1.value)) / (w1 + w2);
+      X = [o2.px - t * ux, o2.py - t * uy];
+      msg(res, 'warning', `Circle ${o1.name} lies completely inside circle ${o2.name} (gap ${Fmt.dist(cc.gap)}). As exact distances they are contradictory – showing the point of least weighted deviation.`);
+    }
+    const ll = proj.inverse(X[0], X[1]);
+    const proj2 = Geo.makeProjection(ll);
+    const obs2 = buildObservations(pr, proj2, USE_RADIUS);
+    res.solutions.push(makeSolution('Point of least deviation', { lat: ll.lat, lon: ll.lon, proj: proj2, obs: obs2, adj: null }, { kind: 'deviation' }));
+    res.data.deviationPoint = ll;
+    res.stats.push(['Gap between circles', Fmt.dist(cc.gap)]);
+    return res;
+  },
+
+  /**
+   * Mode 3 — trilateration (≥ 3 radii). Non-linear least squares
+   * Σ ((‖X − Pi‖ − ri)/σi)² → min, solved by Levenberg–Marquardt from the
+   * linearised solution and all pairwise circle intersections. The common area
+   * is the intersection of all disks (Turf).
+   */
+  trilateration(points) {
+    const res = newResult('trilateration');
+    const pr = points.filter(hasRadius);
+    if (pr.length < 3) return msg(res, 'error', `Trilateration needs at least three points with a radius (found ${pr.length}).`);
+    noteIgnored(res, points, 'bearing');
+    const sols = lsqMulti(pr, USE_RADIUS);
+    if (!sols.length) return msg(res, 'error', 'The adjustment failed – no solution found.');
+    sols.forEach((rc, i) => res.solutions.push(makeSolution(sols.length > 1 ? `Solution ${'ABCD'[i]}` : 'Least-squares estimate', rc, { kind: i ? 'alternative' : 'estimate' })));
+    if (sols.length > 1) msg(res, 'warning', `Ambiguous: ${sols.length} equally good positions. This happens when all circle centres lie (almost) on one line – add a point off that line or a bearing.`);
+    const best = res.solutions[0];
+    checkAdjustment(res, best);
+    addAdjustmentStats(res, best);
+    const common = intersectAll(pr.map((p) => turfCircle(p, p.radius)));
+    if (common) {
+      res.areas.push({ feature: common, kind: 'area', label: 'Area common to all circles', areaM2: turf.area(common) });
+      res.stats.push(['Common area of all circles', Fmt.area(turf.area(common))]);
+    } else {
+      msg(res, 'info', 'There is no area common to all circles (with exact distances this is normal; as maximum distances it means the data is contradictory).');
+    }
+    res.data.commonArea = common;
+    return res;
+  },
+
+  /**
+   * Mode 4 — triangulation (bearings). Two bearings: closed-form ray intersection.
+   * More bearings: least squares on the angular residuals
+   *   v = atan2(x − xi, y − yi) − αi,  weights 1/σ²,
+   * started from all forward ray intersections and the linear "closest point to all lines".
+   * Parallel rays (crossing angle < limit) and intersections behind an observer are reported.
+   * The area is the intersection of the ±k·σ bearing cones.
+   */
+  triangulation(points) {
+    const res = newResult('triangulation');
+    const pb = points.filter(hasBearing);
+    if (pb.length < 2) return msg(res, 'error', `Triangulation needs at least two points with a bearing (found ${pb.length}).`);
+    noteIgnored(res, points, 'radius');
+    const proj = Geo.makeProjection(Geo.centroid(pb));
+    const obs = buildObservations(pb, proj, USE_BEARING);
+    let minAngle = 90, anyForward = false, parallelPairs = 0, pairs = 0;
+    let firstPair = null;
+    for (let i = 0; i < obs.length; i++) for (let j = i + 1; j < obs.length; j++) {
+      const rr = rayRay(obs[i], obs[j]); pairs++;
+      if (!firstPair) firstPair = rr;
+      if (rr.parallel) { parallelPairs++; continue; }
+      minAngle = Math.min(minAngle, rr.angleDeg);
+      if (rr.t1 > 0 && rr.t2 > 0) anyForward = true;
+    }
+    if (parallelPairs === pairs) {
+      if (obs.length === 2 && firstPair.facing && firstPair.offset < Math.max(1, 0.01 * Math.hypot(obs[1].px - obs[0].px, obs[1].py - obs[0].py))) {
+        return msg(res, 'error', 'Both bearings lie on the same line and point at each other: the target is somewhere between the two observers, but its position along the line cannot be determined.');
+      }
+      return msg(res, 'error', `The bearing lines are parallel (crossing angle < ${CONFIG.PARALLEL_LIMIT_DEG}°) – they have no usable intersection.`);
+    }
+    if (obs.length === 2 && !anyForward) {
+      const rr = firstPair, ll = proj.inverse(rr.x, rr.y);
+      const proj2 = Geo.makeProjection(ll);
+      res.solutions.push(makeSolution('Line intersection (behind observer)', { lat: ll.lat, lon: ll.lon, proj: proj2, obs: buildObservations(pb, proj2, USE_BEARING), adj: null }, { kind: 'deviation' }));
+      return msg(res, 'warning', `The bearing rays do not meet in front of the observers – the lines only intersect behind ${rr.t1 <= 0 ? obs[0].name : obs[1].name}. The bearings are contradictory; check the directions.`);
+    }
+    const sols = lsqMulti(pb, USE_BEARING);
+    if (!sols.length) return msg(res, 'error', 'The adjustment failed – no solution found.');
+    sols.forEach((rc, i) => res.solutions.push(makeSolution(sols.length > 1 ? `Solution ${'ABCD'[i]}` : (pb.length === 2 ? 'Intersection of bearings' : 'Least-squares estimate'), rc, { kind: i ? 'alternative' : 'estimate' })));
+    const best = res.solutions[0];
+    checkAdjustment(res, best);
+    addAdjustmentStats(res, best);
+    if (parallelPairs) msg(res, 'info', `${parallelPairs} pair(s) of bearing lines are (nearly) parallel and were not used for start values.`);
+    if (minAngle < CONFIG.POOR_GEOMETRY_DEG) msg(res, 'info', `Poor intersection geometry: the bearing lines cross at only ${minAngle.toFixed(1)}°. The uncertainty along the lines is large.`);
+    if (best.residuals.some((r) => Math.abs(r.residual) > 90)) msg(res, 'warning', 'The estimate lies behind at least one observer (bearing residual > 90°) – the bearings are contradictory.');
+    res.stats.push(['Smallest crossing angle', `${minAngle.toFixed(1)}°`]);
+    // Bearing cones (±k·σ) and their intersection
+    const maxD = Math.max(...pb.map((p) => Geo.distance(p, best)));
+    const L = Math.max(1000, 1.5 * maxD);
+    const cones = pb.map((p) => wedgePolygon(p, p.bearing, CONFIG.WEDGE_K * sigmaBearingDeg(p), L));
+    const common = intersectAll(cones);
+    if (common) {
+      res.areas.push({ feature: common, kind: 'area', label: `Intersection of the ±${CONFIG.WEDGE_K}σ bearing cones`, areaM2: turf.area(common) });
+      res.stats.push([`Cone intersection (±${CONFIG.WEDGE_K}σ)`, Fmt.area(turf.area(common))]);
+    }
+    return res;
+  },
+
+  /**
+   * Mode 5 — mixed. Radii and bearings enter one weighted adjustment
+   * (radius residuals in metres / σ_r, bearing residuals in radians / σ_b), so
+   * both types become dimensionless and comparable. Start values come from
+   * polar fixes, circle/ray intersections and the linear solutions.
+   */
+  mixed(points) {
+    const res = newResult('mixed');
+    const used = points.filter((p) => hasRadius(p) || hasBearing(p));
+    const nR = used.filter(hasRadius).length, nB = used.filter(hasBearing).length;
+    if (nR + nB < 2) return msg(res, 'error', `The joint adjustment needs at least two measurements in total (found ${nR} radius, ${nB} bearing).`);
+    if (!nR || !nB) msg(res, 'info', `Only ${nR ? 'radii' : 'bearings'} are present – the joint adjustment works, but mode ${nR ? 3 : 4} gives the more specific display.`);
+    if (nB === 0 && nR === 2) msg(res, 'info', 'Two radii alone usually give two possible positions.');
+    const sols = lsqMulti(used, USE_BOTH);
+    if (!sols.length) return msg(res, 'error', 'The adjustment failed – no solution found.');
+    sols.forEach((rc, i) => res.solutions.push(makeSolution(sols.length > 1 ? `Solution ${'ABCD'[i]}` : 'Joint least-squares estimate', rc, { kind: i ? 'alternative' : 'estimate' })));
+    if (sols.length > 1) msg(res, 'warning', `Ambiguous: ${sols.length} equally good positions. Add another radius or bearing to decide.`);
+    const best = res.solutions[0];
+    checkAdjustment(res, best);
+    addAdjustmentStats(res, best);
+    res.stats.push(['Radii / bearings used', `${nR} / ${nB}`]);
+    const polys = used.filter(hasRadius).map((p) => turfCircle(p, p.radius));
+    const pb = used.filter(hasBearing);
+    if (pb.length) {
+      const maxD = Math.max(...pb.map((p) => Geo.distance(p, best)), ...used.filter(hasRadius).map((p) => p.radius));
+      const L = Math.max(1000, 1.5 * maxD);
+      pb.forEach((p) => polys.push(wedgePolygon(p, p.bearing, CONFIG.WEDGE_K * sigmaBearingDeg(p), L)));
+    }
+    const common = intersectAll(polys);
+    if (common) {
+      res.areas.push({ feature: common, kind: 'area', label: `Common area (circles ∩ ±${CONFIG.WEDGE_K}σ bearing cones)`, areaM2: turf.area(common) });
+      res.stats.push(['Common area', Fmt.area(turf.area(common))]);
+    }
+    return res;
+  },
+
+  /** Mode 6 — Delaunay triangulation of the points (turf.tin): no circumcircle contains another point. */
+  delaunay(points) {
+    const res = newResult('delaunay');
+    const seen = new Set(), uniq = [];
+    for (const p of points) {
+      const key = p.lat.toFixed(9) + ',' + p.lon.toFixed(9);
+      if (!seen.has(key)) { seen.add(key); uniq.push(p); }
+    }
+    if (uniq.length < 3) return msg(res, 'error', `The Delaunay mesh needs at least three distinct points (found ${uniq.length}).`);
+    if (uniq.length < points.length) msg(res, 'info', `${points.length - uniq.length} duplicate point(s) ignored.`);
+    const tin = turf.tin(turf.featureCollection(uniq.map((p) => turf.point([p.lon, p.lat], { name: p.name }))));
+    const tris = (tin.features || []).filter((f) => turf.area(f) > 1e-6);
+    if (!tris.length) return msg(res, 'error', 'All points lie on one line – no triangles can be formed.');
+    const edges = new Map();
+    let total = 0;
+    tris.forEach((f, i) => {
+      const a = turf.area(f); total += a;
+      f.properties = Object.assign({}, f.properties, { triangle: i + 1, area_m2: a });
+      res.areas.push({ feature: f, kind: 'mesh', label: `Triangle ${i + 1}`, areaM2: a });
+      const ring = f.geometry.coordinates[0];
+      for (let k = 0; k < 3; k++) {
+        const u = ring[k], v = ring[k + 1], ku = u.join(','), kv = v.join(',');
+        const key = ku < kv ? ku + '|' + kv : kv + '|' + ku;
+        if (!edges.has(key)) edges.set(key, Geo.distance({ lat: u[1], lon: u[0] }, { lat: v[1], lon: v[0] }));
+      }
+    });
+    const lens = [...edges.values()];
+    res.data = { triangles: tris.length, edges: edges.size, totalArea: total };
+    res.stats.push(['Points', String(uniq.length)], ['Triangles', String(tris.length)], ['Edges', String(edges.size)],
+      ['Total area (convex hull)', Fmt.area(total)], ['Shortest / longest edge', `${Fmt.dist(Math.min(...lens))} / ${Fmt.dist(Math.max(...lens))}`]);
+    msg(res, 'info', 'Delaunay mesh of the measurement points (no target estimate in this mode).');
+    return res;
+  },
+};
+
+/** Automatic mode selection from the available data. */
+function autoSelect(points) {
+  const nR = points.filter(hasRadius).length, nB = points.filter(hasBearing).length;
+  if (!points.length) return { mode: null, reason: 'No usable points yet. Click on the map or add a row.' };
+  if (!nR && !nB) {
+    return points.length >= 3
+      ? { mode: 'delaunay', reason: 'no radii or bearings entered → triangle mesh of the points' }
+      : { mode: null, reason: 'Enter a radius and/or a bearing for at least one point.' };
+  }
+  if (!nB) {
+    if (nR === 1) return { mode: 'circle', reason: 'one radius' };
+    if (nR === 2) return { mode: 'twoCircles', reason: 'two radii' };
+    return { mode: 'trilateration', reason: `${nR} radii` };
+  }
+  if (!nR) {
+    return nB >= 2 ? { mode: 'triangulation', reason: `${nB} bearings` }
+      : { mode: null, reason: 'A single bearing only gives a line. Add a second bearing or a radius.' };
+  }
+  return { mode: 'mixed', reason: `${nR} radius / ${nB} bearing measurement(s)` };
+}
+
+function runMode(mode, points) {
+  const fn = Modes[mode];
+  if (!fn) return msg(newResult(mode), 'error', 'Unknown mode.');
+  try { return fn(points); }
+  catch (e) { console.error(e); return msg(newResult(mode), 'error', 'Calculation failed: ' + (e && e.message ? e.message : e)); }
+}
+
+/* ---------- Formatting ---------- */
+const Fmt = {
+  dist(m) {
+    if (!Number.isFinite(m)) return '–';
+    const a = Math.abs(m);
+    if (a >= 1000) return (m / 1000).toFixed(a >= 100000 ? 1 : 3) + ' km';
+    return m.toFixed(a >= 100 ? 1 : 2) + ' m';
+  },
+  area(m2) {
+    if (!Number.isFinite(m2)) return '–';
+    if (m2 >= 1e6) return (m2 / 1e6).toFixed(m2 >= 1e8 ? 1 : 3) + ' km² (' + Math.round(m2 / 1e4).toLocaleString('en-US') + ' ha)';
+    return Math.round(m2).toLocaleString('en-US') + ' m² (' + (m2 / 1e4).toFixed(2) + ' ha)';
+  },
+  latlon(lat, lon) { return lat.toFixed(6) + ', ' + lon.toFixed(6); },
+  num(v, d) { return Number.isFinite(v) ? v.toFixed(d) : '–'; },
+};
+
+/* =====================================================================
+ * 3. STATE  (points are stored as the strings the user typed)
+ * ===================================================================== */
+const State = {
+  points: [],      // {id, name, lat, lon, radius, sigmaR, bearing, sigmaB, visible}
+  mode: 'auto',
+  clickAdd: true,
+  theme: 'auto',
+  baseLayer: 'OpenStreetMap',
+  nextId: 1,
+  lastResult: null,
+  lastSelection: null,
+
+  byId(id) { return this.points.find((p) => p.id === id); },
+  add(partial) {
+    const id = this.nextId++;
+    const p = Object.assign({ id, name: 'P' + id, lat: '', lon: '', radius: '', sigmaR: '', bearing: '', sigmaB: '', visible: true }, partial || {});
+    p.id = id;
+    if (!p.name) p.name = 'P' + id;
+    this.points.push(p);
+    return p;
+  },
+  remove(id) { this.points = this.points.filter((p) => p.id !== id); },
+  clear() { this.points = []; this.nextId = 1; },
+  save() {
+    try {
+      localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify({
+        v: 1, points: this.points, mode: this.mode, clickAdd: this.clickAdd, theme: this.theme, baseLayer: this.baseLayer, nextId: this.nextId,
+      }));
+    } catch (e) { /* storage unavailable (private mode, file:// restrictions) – ignore */ }
+  },
+  load() {
+    try {
+      const raw = localStorage.getItem(CONFIG.STORAGE_KEY);
+      if (!raw) return false;
+      const s = JSON.parse(raw);
+      if (!s || !Array.isArray(s.points)) return false;
+      const str = (v) => (v === null || v === undefined ? '' : String(v));
+      this.points = s.points.map((p, i) => ({
+        id: Number.isInteger(p.id) ? p.id : i + 1, name: str(p.name), lat: str(p.lat), lon: str(p.lon), radius: str(p.radius),
+        sigmaR: str(p.sigmaR), bearing: str(p.bearing), sigmaB: str(p.sigmaB), visible: p.visible !== false,
+      }));
+      this.nextId = Math.max(Number(s.nextId) || 1, ...this.points.map((p) => p.id + 1), 1);
+      if (MODE_LABELS[s.mode]) this.mode = s.mode;
+      if (typeof s.clickAdd === 'boolean') this.clickAdd = s.clickAdd;
+      if (['auto', 'light', 'dark'].includes(s.theme)) this.theme = s.theme;
+      if (typeof s.baseLayer === 'string') this.baseLayer = s.baseLayer;
+      return true;
+    } catch (e) { return false; }
+  },
+};
+
+/** Parse a user-entered number (accepts decimal comma). Returns null for empty, NaN for invalid. */
+function parseNumber(s) {
+  if (s === null || s === undefined) return null;
+  const t = String(s).trim().replace(/\s+/g, '').replace(',', '.');
+  if (t === '') return null;
+  const v = Number(t);
+  return Number.isFinite(v) ? v : NaN;
+}
+/** Validate one state point → numeric point for the mode functions. */
+function parsePoint(p, index) {
+  const invalid = {}, errors = [];
+  const lat = parseNumber(p.lat), lon = parseNumber(p.lon);
+  const radius = parseNumber(p.radius), sigmaR = parseNumber(p.sigmaR), bearing = parseNumber(p.bearing), sigmaB = parseNumber(p.sigmaB);
+  if (lat === null || Number.isNaN(lat) || lat < -90 || lat > 90) { invalid.lat = true; errors.push(lat === null ? 'latitude missing' : 'latitude must be between −90 and 90'); }
+  if (lon === null || Number.isNaN(lon) || lon < -180 || lon > 180) { invalid.lon = true; errors.push(lon === null ? 'longitude missing' : 'longitude must be between −180 and 180'); }
+  if (radius !== null && (Number.isNaN(radius) || radius <= 0)) { invalid.radius = true; errors.push('radius must be a positive number (metres)'); }
+  if (sigmaR !== null && (Number.isNaN(sigmaR) || sigmaR <= 0)) { invalid.sigmaR = true; errors.push('σ r must be a positive number'); }
+  if (bearing !== null && Number.isNaN(bearing)) { invalid.bearing = true; errors.push('bearing must be a number (degrees)'); }
+  if (sigmaB !== null && (Number.isNaN(sigmaB) || sigmaB <= 0 || sigmaB >= 90)) { invalid.sigmaB = true; errors.push('σ b must be between 0 and 90 degrees'); }
+  const ok = !invalid.lat && !invalid.lon;
+  const clean = (v, bad) => (bad || v === null ? null : v);
+  return {
+    ok, index, visible: p.visible !== false, invalid, errors,
+    value: {
+      id: p.id, name: (p.name || '').trim() || 'P' + (index + 1), lat, lon,
+      radius: clean(radius, invalid.radius), sigmaR: clean(sigmaR, invalid.sigmaR),
+      bearing: invalid.bearing || bearing === null ? null : Geo.norm360(bearing), sigmaB: clean(sigmaB, invalid.sigmaB),
+    },
+  };
+}
+
+/* =====================================================================
+ * 4. IMPORT / EXPORT  (CSV, GeoJSON)
+ * ===================================================================== */
+const IO = {
+  FIELDS: ['name', 'lat', 'lon', 'radius', 'sigmaR', 'bearing', 'sigmaB', 'visible'],
+  CSV_HEADER: ['name', 'lat', 'lon', 'radius_m', 'sigma_radius_m', 'bearing_deg', 'sigma_bearing_deg', 'visible'],
+  ALIASES: {
+    name: ['name', 'label', 'id', 'title', 'point'],
+    lat: ['lat', 'latitude', 'lat_deg', 'y'],
+    lon: ['lon', 'lng', 'long', 'longitude', 'lon_deg', 'x'],
+    radius: ['radius_m', 'radius', 'r', 'distance', 'distance_m', 'range', 'range_m', 'dist'],
+    sigmaR: ['sigma_radius_m', 'sigma_r', 'sigma_radius', 'radius_sigma', 'sigmar', 'uncertainty_m', 'radius_uncertainty', 'sigma_m'],
+    bearing: ['bearing_deg', 'bearing', 'azimuth', 'azimuth_deg', 'az', 'heading', 'direction'],
+    sigmaB: ['sigma_bearing_deg', 'sigma_b', 'sigma_bearing', 'bearing_sigma', 'sigmab', 'uncertainty_deg', 'bearing_uncertainty'],
+    visible: ['visible', 'show', 'enabled', 'use'],
+  },
+  fieldFor(header) {
+    const h = String(header).trim().toLowerCase().replace(/[\s\-()°]+/g, '_').replace(/_+$/, '');
+    for (const f of this.FIELDS) if (this.ALIASES[f].includes(h)) return f;
+    return null;
+  },
+  csvEscape(v) {
+    const s = v === null || v === undefined ? '' : String(v);
+    return /[",;\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  },
+  toCSV(points) {
+    const rows = [this.CSV_HEADER.join(',')];
+    for (const p of points) {
+      rows.push([p.name, p.lat, p.lon, p.radius, p.sigmaR, p.bearing, p.sigmaB, p.visible === false ? 'false' : 'true']
+        .map((v, i) => this.csvEscape(i > 0 && i < 7 ? String(v).trim().replace(',', '.') : v)).join(','));
+    }
+    return rows.join('\r\n') + '\r\n';
+  },
+  /** Split CSV text into rows of cells (handles quotes, CRLF). */
+  splitCSV(text, delim) {
+    const rows = []; let row = [], cell = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (q) {
+        if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+        else cell += c;
+      } else if (c === '"') q = true;
+      else if (c === delim) { row.push(cell); cell = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (c === '\r' && text[i + 1] === '\n') i++;
+        row.push(cell); rows.push(row); row = []; cell = '';
+      } else cell += c;
+    }
+    if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+    return rows.filter((r) => r.some((c) => c.trim() !== ''));
+  },
+  /** Parse CSV → array of state-point partials. Throws with a readable message on failure. */
+  parseCSV(text) {
+    text = text.replace(/^﻿/, '');
+    const first = text.split(/\r?\n/).find((l) => l.trim() !== '') || '';
+    const counts = { ',': (first.match(/,/g) || []).length, ';': (first.match(/;/g) || []).length, '\t': (first.match(/\t/g) || []).length };
+    const delim = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+    const rows = this.splitCSV(text, delim);
+    if (!rows.length) throw new Error('The CSV file is empty.');
+    let map = rows[0].map((h) => this.fieldFor(h));
+    let body = rows.slice(1);
+    if (!map.includes('lat') || !map.includes('lon')) {
+      const numeric = rows[0].every((c) => c.trim() === '' || !Number.isNaN(parseNumber(c)));
+      if (!numeric) throw new Error('No “lat” and “lon” columns found in the CSV header.');
+      map = ['lat', 'lon', 'radius', 'bearing', 'sigmaR', 'sigmaB']; // header-less: lat,lon,radius,bearing,…
+      body = rows;
+    }
+    return body.map((r) => {
+      const p = {};
+      map.forEach((f, i) => {
+        if (!f || r[i] === undefined) return;
+        const v = r[i].trim();
+        if (f === 'visible') p.visible = !/^(false|0|no|n|hidden)$/i.test(v);
+        else p[f] = f === 'name' ? v : v.replace(',', '.');
+      });
+      return p;
+    }).filter((p) => p.lat !== undefined && p.lat !== '' && p.lon !== undefined && p.lon !== '');
+  },
+  toGeoJSON(points) {
+    const num = (v) => { const n = parseNumber(v); return Number.isFinite(n) ? n : null; };
+    return {
+      type: 'FeatureCollection',
+      features: points.filter((p) => Number.isFinite(parseNumber(p.lat)) && Number.isFinite(parseNumber(p.lon))).map((p) => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [num(p.lon), num(p.lat)] },
+        properties: { name: p.name, radius_m: num(p.radius), sigma_radius_m: num(p.sigmaR), bearing_deg: num(p.bearing), sigma_bearing_deg: num(p.sigmaB), visible: p.visible !== false },
+      })),
+    };
+  },
+  parseGeoJSON(text) {
+    let gj;
+    try { gj = JSON.parse(text); } catch (e) { throw new Error('Invalid JSON: ' + e.message); }
+    const feats = gj.type === 'FeatureCollection' ? gj.features : gj.type === 'Feature' ? [gj] : [{ type: 'Feature', geometry: gj, properties: {} }];
+    if (!Array.isArray(feats)) throw new Error('Not a GeoJSON FeatureCollection.');
+    const out = []; let skipped = 0;
+    const str = (v) => (v === null || v === undefined ? '' : String(v));
+    for (const f of feats) {
+      const g = f && f.geometry, props = (f && f.properties) || {};
+      const coords = !g ? [] : g.type === 'Point' ? [g.coordinates] : g.type === 'MultiPoint' ? g.coordinates : null;
+      if (!coords) { skipped++; continue; }
+      for (const c of coords) {
+        const p = { lon: str(c[0]), lat: str(c[1]) };
+        for (const [k, v] of Object.entries(props)) {
+          const fld = this.fieldFor(k);
+          if (!fld || fld === 'lat' || fld === 'lon') continue;
+          if (fld === 'visible') p.visible = v !== false && v !== 'false' && v !== 0;
+          else if (v !== null && v !== undefined) p[fld] = str(v);
+        }
+        out.push(p);
+      }
+    }
+    return { points: out, skipped };
+  },
+  /** GeoJSON export of a calculation result. */
+  resultToGeoJSON(result, sel, activePoints) {
+    const features = [];
+    const meta = { mode: result.mode, mode_label: result.label, selection: sel && sel.auto ? 'automatic' : 'manual', created: new Date().toISOString() };
+    for (const s of result.solutions) {
+      features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [s.lon, s.lat] }, properties: Object.assign({
+        role: s.kind, label: s.label, lat: s.lat, lon: s.lon,
+        radius95_m: s.ellipse ? s.ellipse.radius95 : null,
+        ellipse95_semi_major_m: s.ellipse ? s.ellipse.a95 : null, ellipse95_semi_minor_m: s.ellipse ? s.ellipse.b95 : null,
+        ellipse_azimuth_deg: s.ellipse ? s.ellipse.azimuthDeg : null,
+        s0: s.adjustment ? s.adjustment.s0 : null,
+        residuals: s.residuals.map((r) => ({ point: r.name, type: r.type, observed: r.observed, computed: r.computed, residual: r.residual, unit: r.unit })),
+      }, meta) });
+      if (s.ellipse && s.ellipse.ring) features.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [s.ellipse.ring] }, properties: Object.assign({ role: 'error_ellipse_95', label: s.label }, meta) });
+    }
+    for (const a of result.areas) features.push({ type: 'Feature', geometry: a.feature.geometry, properties: Object.assign({ role: a.kind === 'mesh' ? 'triangle' : 'area', label: a.label, area_m2: a.areaM2 }, meta) });
+    for (const p of activePoints) features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [p.lon, p.lat] }, properties: { role: 'measurement_point', name: p.name, radius_m: p.radius, sigma_radius_m: p.sigmaR, bearing_deg: p.bearing, sigma_bearing_deg: p.sigmaB } });
+    return { type: 'FeatureCollection', features };
+  },
+};
+
+/** Trigger a file download from text (works from file:// pages). */
+function download(filename, text, mime) {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+/* =====================================================================
+ * 5. MAP (Leaflet)
+ * ===================================================================== */
+const MapView = {
+  map: null, markers: new Map(), obsLayer: null, resultLayer: null, draggingId: null, selectedId: null,
+
+  init() {
+    this.map = L.map('map', { zoomControl: true, worldCopyJump: true }).setView([CONFIG.DEFAULT_VIEW.lat, CONFIG.DEFAULT_VIEW.lon], CONFIG.DEFAULT_VIEW.zoom);
+    const bases = {
+      OpenStreetMap: L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTRIBUTION, className: 'tiles-filterable' }),
+    };
+    for (const t of ALT_TILE_LAYERS) {
+      bases[t.name] = L.tileLayer(t.url, { maxZoom: t.maxZoom, subdomains: t.subdomains, attribution: t.attribution, className: t.filterable ? 'tiles-filterable' : '' });
+    }
+    (bases[State.baseLayer] || bases.OpenStreetMap).addTo(this.map);
+    L.control.layers(bases, null, { position: 'topright' }).addTo(this.map);
+    L.control.scale({ imperial: false }).addTo(this.map);
+    this.map.on('baselayerchange', (e) => { State.baseLayer = e.name; State.save(); });
+    let tileErrors = 0;
+    Object.values(bases).forEach((b) => b.on('tileerror', () => {
+      if (++tileErrors === 6) UI.toast('Map tiles fail to load. Check the internet connection or choose another base map (layer button, top right).', 6000);
+    }));
+    this.obsLayer = L.layerGroup().addTo(this.map);
+    this.resultLayer = L.layerGroup().addTo(this.map);
+    this.map.on('click', (e) => {
+      if (!State.clickAdd) return;
+      const p = State.add({ lat: e.latlng.lat.toFixed(6), lon: Geo.wrap180(e.latlng.lng).toFixed(6) });
+      UI.renderTable();
+      UI.highlightRow(p.id, true);
+      scheduleRecalc(0);
+    });
+  },
+
+  markerIcon(label, selected) {
+    return L.divIcon({ className: '', html: `<div class="pt-marker${selected ? ' sel' : ''}">${label}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] });
+  },
+
+  /** Keep markers in sync with the state without re-creating them (keeps drag & drop working). */
+  syncMarkers(parsed) {
+    const live = new Set();
+    for (const pp of parsed) {
+      if (!pp.ok || !pp.visible) continue;
+      const v = pp.value, label = String(pp.index + 1), sel = this.selectedId === v.id;
+      live.add(v.id);
+      let m = this.markers.get(v.id);
+      if (!m) {
+        m = L.marker([v.lat, v.lon], { draggable: true, icon: this.markerIcon(label, sel), autoPan: true, keyboard: true, title: v.name });
+        m._label = label; m._sel = sel;
+        m.bindTooltip(v.name, { direction: 'top', offset: [0, -12], className: 'pt-tip' });
+        const id = v.id;
+        m.on('dragstart', () => { this.draggingId = id; });
+        m.on('drag', () => { this.onDrag(id, m.getLatLng()); });
+        m.on('dragend', () => { this.onDrag(id, m.getLatLng()); this.draggingId = null; scheduleRecalc(0); });
+        m.on('click', () => { UI.highlightRow(id, true); });
+        m.addTo(this.map);
+        this.markers.set(v.id, m);
+      } else {
+        if (this.draggingId !== v.id) {
+          const ll = m.getLatLng();
+          if (Math.abs(ll.lat - v.lat) > 1e-10 || Math.abs(ll.lng - v.lon) > 1e-10) m.setLatLng([v.lat, v.lon]);
+        }
+        if (m._label !== label || m._sel !== sel) { m.setIcon(this.markerIcon(label, sel)); m._label = label; m._sel = sel; }
+        m.setTooltipContent(v.name);
+      }
+    }
+    for (const [id, m] of this.markers) if (!live.has(id)) { m.remove(); this.markers.delete(id); }
+  },
+
+  onDrag(id, ll) {
+    const p = State.byId(id);
+    if (!p) return;
+    p.lat = ll.lat.toFixed(6); p.lon = Geo.wrap180(ll.lng).toFixed(6);
+    UI.updateRowCoords(id);
+    scheduleRecalc();
+  },
+
+  /** Radius circles and bearing lines of the active measurement points. */
+  drawObservations(active, result) {
+    this.obsLayer.clearLayers();
+    const primary = result && result.solutions && result.solutions[0];
+    let spread = 0;
+    for (let i = 0; i < active.length; i++) for (let j = i + 1; j < active.length; j++) spread = Math.max(spread, Geo.distance(active[i], active[j]));
+    const maxR = Math.max(0, ...active.filter(hasRadius).map((p) => p.radius));
+    for (const p of active) {
+      if (hasRadius(p)) {
+        L.circle([p.lat, p.lon], { radius: p.radius, color: '#1c64d6', weight: 2, dashArray: '6 5', fillColor: '#1c64d6', fillOpacity: 0.04, interactive: false }).addTo(this.obsLayer);
+      }
+      if (hasBearing(p)) {
+        let L0 = Math.max(3000, 1.5 * spread, 1.2 * maxR);
+        if (primary) { const d = Geo.distance(p, primary); L0 = Math.max(1.4 * d, 500); }
+        const pts = Geo.path(p, p.bearing, L0).map((q) => [q.lat, q.lon]);
+        L.polyline(pts, { color: '#e8590c', weight: 2.5, dashArray: '10 6', interactive: false }).addTo(this.obsLayer);
+        const end = pts[pts.length - 1];
+        L.circleMarker(end, { radius: 3, color: '#e8590c', fillOpacity: 1, interactive: false }).addTo(this.obsLayer);
+      }
+    }
+  },
+
+  drawResult(result) {
+    this.resultLayer.clearLayers();
+    if (!result) return;
+    for (const a of result.areas) {
+      const style = a.kind === 'mesh'
+        ? { color: '#7048e8', weight: 1.5, fillColor: '#7048e8', fillOpacity: 0.08 }
+        : { color: '#e03131', weight: 2, fillColor: '#ff6b6b', fillOpacity: 0.28 };
+      L.geoJSON(a.feature, { style }).bindTooltip(`${UI.esc(a.label)}<br>${Fmt.area(a.areaM2)}`, { sticky: true }).addTo(this.resultLayer);
+    }
+    result.solutions.forEach((s) => {
+      if (s.ellipse && s.ellipse.ring) {
+        L.polygon(s.ellipse.ring.map((c) => [c[1], c[0]]), { color: s.kind === 'alternative' ? '#9c36b5' : '#c2255c', weight: 2, dashArray: '4 4', fillOpacity: 0.12 })
+          .bindTooltip(`95 % error ellipse: ${Fmt.dist(s.ellipse.a95)} × ${Fmt.dist(s.ellipse.b95)}`, { sticky: true }).addTo(this.resultLayer);
+      }
+    });
+    result.solutions.forEach((s) => {
+      const alt = s.kind === 'alternative';
+      const m = L.marker([s.lat, s.lon], { icon: L.divIcon({ className: '', html: `<div class="target-marker${alt ? ' alt' : ''}"></div>`, iconSize: [30, 30], iconAnchor: [15, 15] }), zIndexOffset: 1000, keyboard: false });
+      m.bindPopup(`<b>${UI.esc(s.label)}</b><br>${Fmt.latlon(s.lat, s.lon)}${s.ellipse ? `<br>95 % radius: ${Fmt.dist(s.ellipse.radius95)}` : ''}`);
+      m.addTo(this.resultLayer);
+    });
+  },
+
+  fit(onlyResult) {
+    const b = L.latLngBounds([]);
+    if (!onlyResult) this.markers.forEach((m) => b.extend(m.getLatLng()));
+    this.resultLayer.eachLayer((l) => { if (l.getBounds) b.extend(l.getBounds()); else if (l.getLatLng) b.extend(l.getLatLng()); });
+    if (!onlyResult) this.obsLayer.eachLayer((l) => { if (l.getBounds) b.extend(l.getBounds()); });
+    if (b.isValid()) this.map.fitBounds(b.pad(0.1), { maxZoom: 17 });
+  },
+};
+
+/* =====================================================================
+ * 6. UI
+ * ===================================================================== */
+const $ = (sel) => document.querySelector(sel);
+const UI = {
+  esc(s) { return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); },
+
+  toast(text, ms = 2200) {
+    const t = $('#toast');
+    t.textContent = text; t.classList.add('show');
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+  },
+
+  init() {
+    $('#hintSigR').textContent = `${CONFIG.DEFAULT_SIGMA_R_REL * 100} % of r, min. ${CONFIG.DEFAULT_SIGMA_R_MIN_M} m`;
+    $('#hintSigB').textContent = `${CONFIG.DEFAULT_SIGMA_B_DEG}°`;
+    $('#modeSelect').value = State.mode;
+    $('#clickAdd').checked = State.clickAdd;
+    this.applyTheme();
+
+    $('#modeSelect').addEventListener('change', (e) => { State.mode = e.target.value; scheduleRecalc(0); });
+    $('#clickAdd').addEventListener('change', (e) => { State.clickAdd = e.target.checked; State.save(); });
+    $('#btnTheme').addEventListener('click', () => {
+      State.theme = { auto: 'light', light: 'dark', dark: 'auto' }[State.theme];
+      this.applyTheme(); State.save();
+    });
+    $('#btnAddRow').addEventListener('click', () => {
+      const c = MapView.map.getCenter();
+      const p = State.add({ lat: c.lat.toFixed(6), lon: Geo.wrap180(c.lng).toFixed(6) });
+      this.renderTable(); this.highlightRow(p.id, true); scheduleRecalc(0);
+      const inp = document.querySelector(`tr[data-id="${p.id}"] input[data-f="lat"]`);
+      if (inp) inp.focus();
+    });
+    $('#btnClear').addEventListener('click', () => {
+      if (!State.points.length) return;
+      if (!confirm('Delete all points?')) return;
+      State.clear(); this.renderTable(); scheduleRecalc(0);
+    });
+    $('#btnFit').addEventListener('click', () => MapView.fit(false));
+    $('#btnFitResult').addEventListener('click', () => MapView.fit(true));
+    $('#exampleSelect').addEventListener('change', (e) => {
+      const kind = e.target.value; e.target.value = '';
+      if (!kind) return;
+      if (State.points.length && !confirm('Replace the current points with the example?')) return;
+      State.clear();
+      Examples.make(kind).forEach((p) => State.add(p));
+      State.mode = 'auto'; $('#modeSelect').value = 'auto';
+      this.renderTable(); recalc(); MapView.fit(false);
+    });
+
+    // Table editing (event delegation)
+    const tbody = $('#pointsBody');
+    const onEdit = (e) => {
+      const inp = e.target, tr = inp.closest('tr[data-id]');
+      if (!tr || !inp.dataset.f) return;
+      const p = State.byId(Number(tr.dataset.id));
+      if (!p) return;
+      if (inp.dataset.f === 'visible') { p.visible = inp.checked; tr.classList.toggle('hidden-row', !p.visible); }
+      else p[inp.dataset.f] = inp.value;
+      this.validateRow(tr, p);
+      scheduleRecalc();
+    };
+    tbody.addEventListener('input', onEdit);
+    tbody.addEventListener('change', onEdit);
+    tbody.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-act="del"]');
+      const tr = e.target.closest('tr[data-id]');
+      if (btn && tr) { State.remove(Number(tr.dataset.id)); this.renderTable(); scheduleRecalc(0); return; }
+      if (tr && e.target.tagName !== 'INPUT') this.highlightRow(Number(tr.dataset.id), false, true);
+    });
+    tbody.addEventListener('focusin', (e) => {
+      const tr = e.target.closest('tr[data-id]');
+      if (tr) this.highlightRow(Number(tr.dataset.id), false);
+    });
+
+    // Import / export
+    $('#btnImport').addEventListener('click', () => $('#fileInput').click());
+    $('#fileInput').addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => this.importText(String(reader.result), file.name);
+      reader.onerror = () => this.toast('Could not read the file.');
+      reader.readAsText(file);
+    });
+    $('#btnExportCsv').addEventListener('click', () => {
+      if (!State.points.length) return this.toast('No points to export.');
+      download('points.csv', IO.toCSV(State.points), 'text/csv;charset=utf-8');
+    });
+    $('#btnExportGeo').addEventListener('click', () => {
+      if (!State.points.length) return this.toast('No points to export.');
+      download('points.geojson', JSON.stringify(IO.toGeoJSON(State.points), null, 2), 'application/geo+json');
+    });
+    $('#btnExportResult').addEventListener('click', () => {
+      const r = State.lastResult;
+      if (!r || (!r.solutions.length && !r.areas.length)) return this.toast('There is no result to export.');
+      download('result.geojson', JSON.stringify(IO.resultToGeoJSON(r, State.lastSelection, State.lastActive || []), null, 2), 'application/geo+json');
+    });
+
+    // Copy buttons and "zoom to solution" in the result card
+    $('#solutions').addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.dataset.copy) this.copy(b.dataset.copy, b);
+      if (b.dataset.zoom) { const [la, lo] = b.dataset.zoom.split(',').map(Number); MapView.map.setView([la, lo], Math.max(MapView.map.getZoom(), 15)); }
+    });
+
+    $('#btnTests').addEventListener('click', () => this.runTests());
+    this.renderTable();
+  },
+
+  applyTheme() {
+    document.documentElement.setAttribute('data-theme', State.theme);
+    $('#btnTheme').textContent = 'Theme: ' + { auto: 'Auto', light: 'Light', dark: 'Dark' }[State.theme];
+  },
+
+  importText(text, filename) {
+    let pts = [], note = '';
+    try {
+      const isJson = /\.(geo)?json$/i.test(filename) || /^\s*[{[]/.test(text);
+      if (isJson) { const r = IO.parseGeoJSON(text); pts = r.points; if (r.skipped) note = ` (${r.skipped} non-point feature(s) skipped)`; }
+      else pts = IO.parseCSV(text);
+    } catch (e) { this.toast('Import failed: ' + e.message, 5000); return; }
+    if (!pts.length) { this.toast('No points found in the file.', 4000); return; }
+    if (State.points.length && confirm(`Import ${pts.length} point(s).\n\nOK = replace existing points\nCancel = append to existing points`)) State.clear();
+    pts.forEach((p) => State.add(p));
+    this.renderTable(); recalc(); MapView.fit(false);
+    this.toast(`Imported ${pts.length} point(s)${note}.`, 3500);
+  },
+
+  copy(text, btn) {
+    const done = () => { if (btn) { const o = btn.textContent; btn.textContent = 'Copied ✓'; setTimeout(() => { btn.textContent = o; }, 1200); } };
+    const fallback = () => {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); done(); } catch (e) { this.toast('Copy failed – please select the text manually.'); }
+      ta.remove();
+    };
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, fallback);
+    else fallback();
+  },
+
+  renderTable() {
+    const tbody = $('#pointsBody');
+    $('#pointCount').textContent = State.points.length ? `${State.points.length} point(s)` : '';
+    if (!State.points.length) {
+      tbody.innerHTML = '<tr class="empty"><td colspan="10">No points yet – click on the map, add a row, import a file or load an example.</td></tr>';
+      return;
+    }
+    const inp = (p, f, cls, ph, title) => `<input type="text" data-f="${f}" class="${cls}" value="${this.esc(p[f])}" placeholder="${ph}" aria-label="${title}" title="${title}"${f === 'name' ? '' : ' inputmode="decimal"'} autocomplete="off" spellcheck="false">`;
+    tbody.innerHTML = State.points.map((p, i) => `<tr data-id="${p.id}" class="${p.visible === false ? 'hidden-row' : ''}">
+      <td><input type="checkbox" data-f="visible" ${p.visible !== false ? 'checked' : ''} aria-label="Show and use point" title="Show on map and use in calculation"></td>
+      <td class="idx">${i + 1}</td>
+      <td>${inp(p, 'name', 'w-name', 'P' + (i + 1), 'Name')}</td>
+      <td>${inp(p, 'lat', 'w-coord', '48.137', 'Latitude in decimal degrees')}</td>
+      <td>${inp(p, 'lon', 'w-coord', '11.575', 'Longitude in decimal degrees')}</td>
+      <td>${inp(p, 'radius', 'w-num', '–', 'Radius / distance in metres')}</td>
+      <td>${inp(p, 'sigmaR', 'w-sig', 'auto', 'Radius standard deviation in metres')}</td>
+      <td>${inp(p, 'bearing', 'w-num', '–', 'Bearing in degrees from true north')}</td>
+      <td>${inp(p, 'sigmaB', 'w-sig', 'auto', 'Bearing standard deviation in degrees')}</td>
+      <td><button type="button" class="icon-btn danger" data-act="del" title="Delete point" aria-label="Delete point">✕</button></td>
+    </tr>`).join('');
+    tbody.querySelectorAll('tr[data-id]').forEach((tr) => this.validateRow(tr, State.byId(Number(tr.dataset.id))));
+    if (MapView.selectedId) { const tr = tbody.querySelector(`tr[data-id="${MapView.selectedId}"]`); if (tr) tr.classList.add('hl'); }
+  },
+
+  validateRow(tr, p) {
+    const idx = State.points.indexOf(p);
+    const pp = parsePoint(p, idx);
+    tr.querySelectorAll('input[type="text"]').forEach((inp) => {
+      inp.classList.toggle('invalid', !!pp.invalid[inp.dataset.f]);
+    });
+  },
+
+  updateRowCoords(id) {
+    const tr = document.querySelector(`#pointsBody tr[data-id="${id}"]`), p = State.byId(id);
+    if (!tr || !p) return;
+    tr.querySelector('input[data-f="lat"]').value = p.lat;
+    tr.querySelector('input[data-f="lon"]').value = p.lon;
+    this.validateRow(tr, p);
+  },
+
+  highlightRow(id, scroll, panTo) {
+    MapView.selectedId = id;
+    document.querySelectorAll('#pointsBody tr.hl').forEach((r) => r.classList.remove('hl'));
+    const tr = document.querySelector(`#pointsBody tr[data-id="${id}"]`);
+    if (tr) { tr.classList.add('hl'); if (scroll) tr.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+    const m = MapView.markers.get(id);
+    MapView.markers.forEach((mk, mid) => { const sel = mid === id; if (mk._sel !== sel) { mk.setIcon(MapView.markerIcon(mk._label, sel)); mk._sel = sel; } });
+    if (panTo && m) MapView.map.panTo(m.getLatLng());
+  },
+
+  renderResult(result, sel, rowMessages) {
+    const used = result ? result.label : '–';
+    $('#modeUsed').innerHTML = sel.mode
+      ? `<b>Mode used:</b> ${this.esc(used)}${sel.auto ? `<br><span class="muted">Chosen automatically: ${this.esc(sel.reason)}</span>` : ''}`
+      : `<b>Mode used:</b> none <span class="muted">– ${this.esc(sel.reason)}</span>`;
+
+    const msgs = [...rowMessages, ...(result ? result.messages : [])];
+    if (!sel.mode) msgs.push({ level: 'info', text: sel.reason });
+    if (result && result.status === 'ok' && result.solutions.some((s) => s.kind === 'estimate')) msgs.unshift({ level: 'success', text: 'Position estimated successfully.' });
+    $('#messages').innerHTML = msgs.map((m) => `<li class="${m.level}">${this.esc(m.text)}</li>`).join('');
+
+    const sols = result ? result.solutions : [];
+    $('#solutions').innerHTML = sols.map((s) => {
+      const c = Fmt.latlon(s.lat, s.lon), e = s.ellipse;
+      const badge = s.kind === 'estimate' ? '<span class="badge ok">estimate</span>' : s.kind === 'alternative' ? '<span class="badge warn">alternative</span>' : '<span class="badge err">best fit, no intersection</span>';
+      return `<div class="solution">
+        <div class="title">${this.esc(s.label)} ${badge}</div>
+        <div class="coords"><span>${c}</span>
+          <button type="button" class="small" data-copy="${c}" title="Copy coordinates">Copy</button>
+          <button type="button" class="small" data-zoom="${s.lat},${s.lon}" title="Zoom to this position">Zoom</button></div>
+        <div class="unc">${e
+          ? `95 % radius: <b>${Fmt.dist(e.radius95)}</b> · error ellipse (95 %): ${Fmt.dist(e.a95)} × ${Fmt.dist(e.b95)}, major axis ${e.azimuthDeg.toFixed(1)}° from north · σ east/north: ${Fmt.dist(e.sigmaE)} / ${Fmt.dist(e.sigmaN)}`
+          : 'No error ellipse (the geometry does not determine the uncertainty).'}</div>
+      </div>`;
+    }).join('');
+
+    $('#stats').innerHTML = (result ? result.stats : []).map(([k, v]) => `<dt>${this.esc(k)}</dt><dd>${this.esc(v)}</dd>`).join('');
+
+    const primary = sols[0];
+    if (primary && primary.residuals.length) {
+      const rows = primary.residuals.map((r) => {
+        const d = r.unit === 'm' ? 2 : 3, flag = Math.abs(r.norm) > CONFIG.OUTLIER_NORM;
+        return `<tr><td>${this.esc(r.name)}</td><td>${r.type}</td>
+          <td class="num">${Fmt.num(r.observed, d)}${r.unit}</td><td class="num">${Fmt.num(r.computed, d)}${r.unit}</td>
+          <td class="num${flag ? ' flag' : ''}">${r.residual >= 0 ? '+' : ''}${Fmt.num(r.residual, d)}${r.unit}</td>
+          <td class="num${flag ? ' flag' : ''}">${Fmt.num(r.norm, 2)}</td></tr>`;
+      }).join('');
+      $('#residuals').innerHTML = `<div class="muted" style="font-size:12px;margin:4px 0">Residuals for “${this.esc(primary.label)}” (computed − observed, on the sphere):</div>
+        <div class="table-wrap"><table class="res"><thead><tr><th>Point</th><th>Type</th><th>Observed</th><th>Computed</th><th>Residual v</th><th>v/σ</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    } else $('#residuals').innerHTML = '';
+    $('#btnExportResult').disabled = !(result && (result.solutions.length || result.areas.length));
+  },
+
+  runTests() {
+    const out = $('#testResults');
+    out.textContent = 'Running…';
+    setTimeout(() => {
+      const results = Tests.run();
+      const passed = results.filter((r) => r.pass).length;
+      out.classList.remove('muted');
+      out.innerHTML = `<p><span class="badge ${passed === results.length ? 'ok' : 'fail'}">${passed} / ${results.length} passed</span></p>
+        <div class="table-wrap"><table class="res"><thead><tr><th>Test</th><th>Result</th><th>Details</th></tr></thead><tbody>${results.map((r) =>
+          `<tr><td>${this.esc(r.name)}</td><td><span class="badge ${r.pass ? 'ok' : 'fail'}">${r.pass ? 'passed' : 'FAILED'}</span></td><td>${this.esc(r.detail)} <span class="muted">(${r.ms.toFixed(0)} ms)</span></td></tr>`).join('')}</tbody></table></div>`;
+    }, 20);
+  },
+};
+
+/* ---------- Recalculation pipeline ---------- */
+let recalcTimer = null;
+function scheduleRecalc(delay) {
+  clearTimeout(recalcTimer);
+  recalcTimer = setTimeout(recalc, delay === undefined ? CONFIG.RECALC_DEBOUNCE_MS : delay);
+}
+function recalc() {
+  const parsed = State.points.map((p, i) => parsePoint(p, i));
+  const rowMessages = [];
+  parsed.forEach((pp) => {
+    if (pp.visible && pp.errors.length) rowMessages.push({ level: pp.ok ? 'warning' : 'error', text: `Row ${pp.index + 1} (${pp.value.name}): ${pp.errors.join('; ')}${pp.ok ? ' – value ignored.' : ' – point ignored.'}` });
+  });
+  const active = parsed.filter((pp) => pp.ok && pp.visible).map((pp) => pp.value);
+  let sel;
+  if (State.mode === 'auto') sel = Object.assign({ auto: true }, autoSelect(active));
+  else sel = { auto: false, mode: State.mode, reason: 'selected manually' };
+  if (!active.length && !sel.auto) sel = { auto: false, mode: null, reason: 'No usable points yet. Click on the map or add a row.' };
+  const result = sel.mode ? runMode(sel.mode, active) : null;
+  State.lastResult = result; State.lastSelection = sel; State.lastActive = active;
+  MapView.syncMarkers(parsed);
+  MapView.drawObservations(active, result);
+  MapView.drawResult(result);
+  UI.renderResult(result, sel, rowMessages);
+  State.save();
+}
+
+/* ---------- Example data sets ---------- */
+const Examples = {
+  make(kind) {
+    const T = { lat: 48.1374, lon: 11.5755 };
+    const st = (brg, dist) => Geo.destination(T, brg, dist);
+    const f6 = (v) => v.toFixed(6);
+    const pt = (name, q, extra) => Object.assign({ name, lat: f6(q.lat), lon: f6(q.lon) }, extra || {});
+    const rad = (q, off = 0) => (Geo.distance(q, T) + off).toFixed(0);
+    const brg = (q, off = 0) => Geo.norm360(Geo.bearing(q, T) + off).toFixed(1);
+    switch (kind) {
+      case 'circle': { const a = st(250, 1200); return [pt('Tower', a, { radius: '1500' })]; }
+      case 'two': { const a = st(300, 2500), b = st(40, 1800); return [pt('A', a, { radius: rad(a, 40) }), pt('B', b, { radius: rad(b, -25) })]; }
+      case 'tri': {
+        const qs = [st(10, 3200), st(130, 2600), st(235, 3900), st(300, 1800)], off = [35, -20, 50, -15];
+        return qs.map((q, i) => pt('S' + (i + 1), q, { radius: rad(q, off[i]), sigmaR: '50' }));
+      }
+      case 'bearings': {
+        const qs = [st(200, 4000), st(95, 3000), st(330, 3500)], off = [0.8, -0.6, 0.4];
+        return qs.map((q, i) => pt('O' + (i + 1), q, { bearing: brg(q, off[i]), sigmaB: '1' }));
+      }
+      case 'mixed': {
+        const a = st(45, 2500), b = st(160, 3000), c = st(280, 3500);
+        return [pt('R1', a, { radius: rad(a, 30), sigmaR: '40' }), pt('R2', b, { radius: rad(b, -25), sigmaR: '40' }), pt('B1', c, { bearing: brg(c, 0.5), sigmaB: '1' })];
+      }
+      case 'mesh': {
+        const qs = [[0, 0], [20, 1500], [80, 2200], [140, 1800], [200, 2500], [260, 1700], [320, 2100], [110, 3600]];
+        return qs.map(([b, d], i) => pt('M' + (i + 1), d ? st(b, d) : T));
+      }
+      default: return [];
+    }
+  },
+};
+
+/* =====================================================================
+ * 7. SELF-TEST  (synthetic measurements generated from a known target)
+ * ===================================================================== */
+const Tests = (() => {
+  const T0 = { lat: 48.1374, lon: 11.5755 };
+  let seq = 0;
+  const P = (q, o) => Object.assign({ id: ++seq, name: 'T' + seq, lat: q.lat, lon: q.lon, radius: null, sigmaR: null, bearing: null, sigmaB: null }, o || {});
+  const st = (brg, dist, o) => P(Geo.destination(T0, brg, dist), o);
+  const R = (p, off = 0) => { p.radius = Geo.distance(p, T0) + off; return p; };
+  const B = (p, off = 0) => { p.bearing = Geo.norm360(Geo.bearing(p, T0) + off); return p; };
+  const err = (s, t = T0) => Geo.distance(s, t);
+  const near = (a, b, tol) => Math.abs(a - b) <= tol;
+  const ok = (pass, detail) => ({ pass: !!pass, detail });
+  const best = (res) => res.solutions[0];
+
+  const cases = [
+    { name: 'Projection: azimuthal equidistant round trip & exact distance from centre', run() {
+      const proj = Geo.makeProjection(T0); let maxRT = 0, maxD = 0;
+      for (const [b, d] of [[0, 10], [45, 5000], [137, 50000], [260, 300000], [333, 900000]]) {
+        const q = Geo.destination(T0, b, d), [x, y] = proj.forward(q.lat, q.lon), back = proj.inverse(x, y);
+        maxRT = Math.max(maxRT, Geo.distance(q, back)); maxD = Math.max(maxD, Math.abs(Math.hypot(x, y) - d));
+      }
+      return ok(maxRT < 1e-4 && maxD < 1e-4, `round-trip error ${maxRT.toExponential(1)} m, distance error ${maxD.toExponential(1)} m`);
+    } },
+    { name: 'Mode 1: circle area and circumference', run() {
+      const r = Modes.circle([st(0, 500, { radius: 1000 })]);
+      const a = r.data.area, c = r.data.circumference, pa = r.data.polygonArea;
+      return ok(near(a, Math.PI * 1e6, 1e-4 * Math.PI * 1e6) && near(c, 2 * Math.PI * 1000, 0.01) && near(pa, a, 0.005 * a) && r.areas.length === 1,
+        `area ${a.toFixed(1)} m² (πr² = ${(Math.PI * 1e6).toFixed(1)}), polygon ${pa.toFixed(1)} m², circumference ${c.toFixed(2)} m`);
+    } },
+    { name: 'Mode 2: two intersecting circles → intersection points and lens', run() {
+      const r = Modes.twoCircles([R(st(270, 2000)), R(st(10, 3000))]);
+      const e = Math.min(...r.solutions.map((s) => err(s)));
+      const lensOk = r.data.lensPolygonArea && near(r.data.lensPolygonArea, r.data.lensArea, 0.02 * r.data.lensArea);
+      return ok(r.solutions.length === 2 && e < 0.01 && lensOk, `${r.solutions.length} points, closest ${e.toFixed(4)} m from truth; lens ${Fmt.area(r.data.lensArea)} vs polygon ${Fmt.area(r.data.lensPolygonArea || 0)}`);
+    } },
+    { name: 'Mode 2: separate circles → notice + point of least deviation', run() {
+      const a = st(270, 5000), b = st(90, 5000); a.radius = 3000; b.radius = 3000;
+      const r = Modes.twoCircles([a, b]); const s = best(r);
+      const e = s ? err(s) : Infinity;
+      return ok(r.status === 'warning' && r.data.relation === 'separate' && s && s.kind === 'deviation' && e < 1, `relation ${r.data.relation}, deviation point ${e.toFixed(3)} m from the midpoint`);
+    } },
+    { name: 'Mode 2: circle inside circle → notice + point of least deviation', run() {
+      const a = P(T0, { radius: 5000 }), b = st(90, 1000, { radius: 1000 });
+      const r = Modes.twoCircles([a, b]); const s = best(r);
+      // equal weights would put it halfway into the gap; check it lies east of b, between both circle edges
+      const da = s ? Geo.distance(a, s) : 0, db = s ? Geo.distance(b, s) : 0;
+      return ok(r.data.relation === 'contained' && s && da < 5000 && da > 2000 && near(da - 1000, db, 1) && r.areas.length === 1, `relation ${r.data.relation}, ${Fmt.dist(da)} from big centre, ${Fmt.dist(db)} from small centre`);
+    } },
+    { name: 'Mode 3: trilateration with exact distances', run() {
+      const r = Modes.trilateration([R(st(10, 3000)), R(st(130, 2500)), R(st(250, 4000)), R(st(300, 1500))]);
+      const s = best(r), e = err(s);
+      return ok(e < 0.01 && r.solutions.length === 1 && s.ellipse, `error ${e.toFixed(5)} m, ${s.adjustment.iterations} iterations, 95 % radius ${Fmt.dist(s.ellipse.radius95)}`);
+    } },
+    { name: 'Mode 3: trilateration with noise (σ = 20 m)', run() {
+      const off = [15, -22, 9, -12, 25];
+      const pts = [10, 80, 150, 220, 300].map((b, i) => R(st(b, 2000 + 500 * i, { sigmaR: 20 }), off[i]));
+      const r = Modes.trilateration(pts), s = best(r), e = err(s);
+      return ok(e < 40 && s.ellipse && s.adjustment.s0 < 3 && e < 2 * s.ellipse.radius95, `error ${e.toFixed(1)} m, s0 = ${s.adjustment.s0.toFixed(2)}, 95 % radius ${Fmt.dist(s.ellipse.radius95)}`);
+    } },
+    { name: 'Mode 3: common area of all circles contains the target', run() {
+      const pts = [R(st(10, 3000), 300), R(st(130, 2500), 250), R(st(250, 4000), 400)];
+      const r = Modes.trilateration(pts);
+      const inside = r.data.commonArea && turf.booleanPointInPolygon(turf.point([T0.lon, T0.lat]), r.data.commonArea);
+      return ok(inside, inside ? `common area ${Fmt.area(turf.area(r.data.commonArea))}` : 'no common area or target outside');
+    } },
+    { name: 'Mode 3: contradictory radius is detected (s₀ and residual flag)', run() {
+      const pts = [R(st(10, 3000)), R(st(130, 2500)), R(st(250, 4000)), R(st(300, 1500), 2000)];
+      const r = Modes.trilateration(pts), s = best(r);
+      return ok(r.status === 'warning' && s.adjustment.s0 > CONFIG.INCONSISTENT_S0, `s0 = ${s.adjustment.s0.toFixed(1)}, status ${r.status}`);
+    } },
+    { name: 'Mode 3: large scale (stations 30–80 km away)', run() {
+      const r = Modes.trilateration([R(st(0, 30000)), R(st(120, 80000)), R(st(240, 50000))]);
+      const e = err(best(r));
+      return ok(e < 0.05, `error ${e.toFixed(4)} m`);
+    } },
+    { name: 'Mode 4: two bearings intersect at the target', run() {
+      const r = Modes.triangulation([B(st(200, 4000)), B(st(95, 3000))]);
+      const s = best(r), e = err(s);
+      return ok(e < 0.05 && s.ellipse, `error ${e.toFixed(4)} m, 95 % radius ${Fmt.dist(s.ellipse.radius95)}`);
+    } },
+    { name: 'Mode 4: three noisy bearings → least squares', run() {
+      const r = Modes.triangulation([B(st(200, 4000), 0.5), B(st(95, 3000), -0.4), B(st(330, 3500), 0.3)]);
+      const s = best(r), e = err(s);
+      return ok(e < 50 && s.adjustment.dof === 1 && r.areas.length === 1, `error ${e.toFixed(1)} m, s0 = ${s.adjustment.s0.toFixed(2)}, cone area ${r.areas.length ? Fmt.area(r.areas[0].areaM2) : '–'}`);
+    } },
+    { name: 'Mode 4: parallel bearings are detected', run() {
+      const r = Modes.triangulation([st(270, 1000, { bearing: 0 }), st(90, 1000, { bearing: 0.3 })]);
+      return ok(r.status === 'error' && /parallel/i.test(r.messages.map((m) => m.text).join(' ')) && !r.solutions.length, r.messages.map((m) => m.text).join(' '));
+    } },
+    { name: 'Mode 4: rays meeting behind an observer are reported', run() {
+      const r = Modes.triangulation([B(st(270, 2000), 180), B(st(0, 2000))]);
+      return ok(r.status === 'warning' && /behind/i.test(r.messages.map((m) => m.text).join(' ')), r.messages.map((m) => m.text).join(' '));
+    } },
+    { name: 'Mode 5: mixed (2 radii + 1 bearing)', run() {
+      const r = Modes.mixed([R(st(45, 2500)), R(st(160, 3000)), B(st(280, 3500))]);
+      const s = best(r), e = err(s);
+      return ok(e < 0.05 && r.solutions.length === 1, `error ${e.toFixed(4)} m, ${r.solutions.length} solution(s)`);
+    } },
+    { name: 'Mode 5: polar fix (one point with radius + bearing)', run() {
+      const p = B(R(st(123, 7000)));
+      const r = Modes.mixed([p]), e = err(best(r));
+      return ok(e < 0.05 && r.solutions.length === 1, `error ${e.toFixed(4)} m`);
+    } },
+    { name: 'Mode 5: one radius + one bearing from different points → ambiguity', run() {
+      const r = Modes.mixed([R(st(0, 3000)), B(st(260, 4000))]);
+      const e = Math.min(...r.solutions.map((s) => err(s)));
+      return ok(e < 0.05, `${r.solutions.length} solution(s), closest ${e.toFixed(4)} m from truth`);
+    } },
+    { name: 'Mode 6: Delaunay mesh', run() {
+      const sq = [st(45, 1000), st(135, 1000), st(225, 1000), st(315, 1000)];
+      const a = Modes.delaunay(sq), b = Modes.delaunay([...sq, P(T0)]);
+      const c = Modes.delaunay([st(90, 0), st(90, 1000), st(90, 2000)]);
+      return ok(a.data.triangles === 2 && b.data.triangles === 4 && b.data.edges === 8 && c.status === 'error',
+        `square: ${a.data.triangles} triangles; square+centre: ${b.data.triangles} triangles / ${b.data.edges} edges; collinear: ${c.status}`);
+    } },
+    { name: 'Automatic mode selection', run() {
+      const r = st(0, 1000, { radius: 900 }), b = st(90, 1000, { bearing: 270 }), n = st(180, 1000);
+      const cases = [[[r], 'circle'], [[r, r], 'twoCircles'], [[r, r, r], 'trilateration'], [[b, b], 'triangulation'], [[r, b], 'mixed'], [[n, n, n], 'delaunay'], [[b], null], [[], null]];
+      const bad = cases.filter(([pts, m]) => autoSelect(pts).mode !== m);
+      return ok(!bad.length, bad.length ? `wrong for: ${bad.map((c) => c[1]).join(', ')}` : `${cases.length} cases correct`);
+    } },
+    { name: 'CSV and GeoJSON round trip, decimal comma import', run() {
+      const pts = [{ id: 1, name: 'A, "x"', lat: '48.1', lon: '11.5', radius: '100', sigmaR: '', bearing: '45.5', sigmaB: '2', visible: true },
+        { id: 2, name: 'B', lat: '-33.5', lon: '-70.25', radius: '', sigmaR: '', bearing: '', sigmaB: '', visible: false }];
+      const back = IO.parseCSV(IO.toCSV(pts));
+      const csvOk = back.length === 2 && back[0].name === 'A, "x"' && back[0].bearing === '45.5' && back[1].visible === false && back[1].lon === '-70.25';
+      const semi = IO.parseCSV('Name;Latitude;Longitude;Distance\nX;48,5;11,25;1200,5\n');
+      const semiOk = semi.length === 1 && semi[0].lat === '48.5' && semi[0].radius === '1200.5';
+      const gj = IO.parseGeoJSON(JSON.stringify(IO.toGeoJSON(pts))).points;
+      const gjOk = gj.length === 2 && gj[0].radius === '100' && gj[0].lat === '48.1' && gj[1].visible === false;
+      return ok(csvOk && semiOk && gjOk, `CSV ${csvOk ? 'ok' : 'FAIL'}, “;” + decimal comma ${semiOk ? 'ok' : 'FAIL'}, GeoJSON ${gjOk ? 'ok' : 'FAIL'}`);
+    } },
+    { name: 'Levenberg–Marquardt converges from a poor start value', run() {
+      const pts = [R(st(10, 3000)), R(st(130, 2500)), R(st(250, 4000))];
+      const proj = Geo.makeProjection(T0), obs = buildObservations(pts, proj, USE_RADIUS);
+      const adj = adjust(obs, [25000, -18000]);
+      const e = Math.hypot(adj.x, adj.y);
+      return ok(adj.converged && e < 0.05, `from 31 km away: error ${e.toFixed(4)} m after ${adj.iterations} iterations`);
+    } },
+  ];
+
+  function run() {
+    return cases.map((c) => {
+      const t = performance.now();
+      try { return Object.assign({ name: c.name, ms: performance.now() - t }, c.run(), { ms: performance.now() - t }); }
+      catch (e) { return { name: c.name, pass: false, detail: 'Exception: ' + (e && e.message ? e.message : e), ms: performance.now() - t }; }
+    });
+  }
+  return { run };
+})();
+
+/* =====================================================================
+ * 8. BOOT
+ * ===================================================================== */
+function showFatal(html) {
+  const f = document.getElementById('fatal');
+  f.innerHTML = html; f.hidden = false;
+  document.getElementById('app').style.display = 'none';
+}
+(function boot() {
+  const missing = [...window.__libErrors];
+  if (typeof L === 'undefined' && !missing.some((m) => /Leaflet/.test(m))) missing.push('Leaflet 1.9.4');
+  if (typeof turf === 'undefined' && !missing.some((m) => /Turf/.test(m))) missing.push('Turf.js 7.1.0');
+  if (missing.length) {
+    showFatal(`<h2>Required libraries could not be loaded</h2>
+      <p>This application loads its map and geometry libraries from the internet. The following could not be loaded:</p>
+      <ul>${missing.map((m) => `<li>${m}</li>`).join('')}</ul>
+      <p>Please check your internet connection, firewall or content blocker, then reload the page (F5).</p>
+      <p>Your saved points are not lost – they are kept in the browser and will reappear once the libraries load.</p>`);
+    return;
+  }
+  try {
+    State.load();
+    MapView.init();
+    UI.init();
+    recalc();
+    if (State.points.length) MapView.fit(false);
+  } catch (e) {
+    console.error(e);
+    showFatal(`<h2>The application failed to start</h2><p>${UI.esc(e && e.message ? e.message : e)}</p><p>Try reloading the page. If the problem persists, clear this site’s stored data.</p>`);
+  }
+})();
+</script>
+</body>
+</html>
