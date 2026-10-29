@@ -35,7 +35,7 @@ footer a { color: var(--accent); }
 <body>
 <main>
   <h1>OSINT Tools</h1>
-  <p class="lead">Self-contained browser tools for open-source research, built with Claude Code. Each tool is a single HTML file: no installation, no backend, and your data stays in your browser.</p>
+  <p class="lead">Self-contained tools for open-source research, built with Claude Code. Browser tools are a single HTML file: no installation, no backend, and your data stays in your browser. Python tools run locally from the command line.</p>
 
   <ul class="tools">
     <li class="tool">
@@ -43,6 +43,12 @@ footer a { color: var(--accent); }
       <p>Estimate a target's position or possible area from points with distances (radii) and/or bearings, using least-squares adjustment on an OpenStreetMap map.</p>
       <div class="meta"><span class="tag">beta</span><span>v0.1.0</span></div>
       <div class="links"><a href="tools/geo-triangulator/index.html">Open tool →</a><a href="tools/geo-triangulator/README.md">Documentation</a></div>
+    </li>
+    <li class="tool">
+      <h2><a href="tools/selector-recon/README.md">selector-recon</a></h2>
+      <p>Passive lookups for email addresses, phone numbers, usernames, domains and IPs, with paste-ready evidence and a self-contained HTML report.</p>
+      <div class="meta"><span class="tag">beta</span><span>v0.1.0</span><span>Python CLI</span></div>
+      <div class="links"><a href="tools/selector-recon/README.md">Documentation →</a><a href="tools/selector-recon/samples/report.html">Sample report</a></div>
     </li>
   </ul>
 
