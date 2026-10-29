@@ -1,0 +1,27 @@
+{
+  "license": ["Test data in the wmn-data.json format (CC BY-SA 4.0 schema by WhatsMyName)."],
+  "authors": ["selector-recon tests"],
+  "categories": ["social", "coding", "xx NSFW xx"],
+  "sites": [
+    {"name": "FoundSite", "uri_check": "{BASE}/u/{account}", "e_code": 200, "e_string": "profile-header",
+     "m_string": "Page not found", "m_code": 404, "known": ["alice_ctf"], "cat": "social"},
+    {"name": "MissingSite", "uri_check": "{BASE}/missing/{account}", "uri_pretty": "{BASE}/profile/{account}", "e_code": 200,
+     "e_string": "profile-header", "m_string": "Page not found", "m_code": 404, "known": ["x"], "cat": "social"},
+    {"name": "ApiSite", "uri_check": "{BASE}/graphql", "uri_pretty": "{BASE}/user/{account}",
+     "post_body": "{\"query\":\"query{User(name:\\\"{account}\\\"){id name}}\"}",
+     "headers": {"Content-Type": "application/json", "User-Agent": "FakeBrowser/1.0"},
+     "e_code": 200, "e_string": "\"id\":", "m_string": "Not Found", "m_code": 404, "known": ["x"], "cat": "coding"},
+    {"name": "ChallengeSite", "uri_check": "{BASE}/cf/{account}", "e_code": 200, "e_string": "profile-header",
+     "m_string": "Page not found", "m_code": 404, "known": ["x"], "cat": "social", "protection": ["cloudflare"]},
+    {"name": "BrokenSite", "uri_check": "{BASE}/broken/{account}", "e_code": 200, "e_string": "profile-header",
+     "m_string": "Page not found", "m_code": 404, "known": ["x"], "cat": "social"},
+    {"name": "RedirectSite", "uri_check": "{BASE}/r/{account}", "e_code": 200, "e_string": "profile-header",
+     "m_string": "", "m_code": 302, "known": ["x"], "cat": "social"},
+    {"name": "DisabledSite", "uri_check": "{BASE}/disabled/{account}", "e_code": 200, "e_string": "x",
+     "m_string": "y", "m_code": 404, "known": ["x"], "cat": "social", "valid": false},
+    {"name": "AdultSite", "uri_check": "{BASE}/nsfw/{account}", "e_code": 200, "e_string": "profile-header",
+     "m_string": "Page not found", "m_code": 404, "known": ["x"], "cat": "xx NSFW xx"},
+    {"name": "StripSite", "uri_check": "{BASE}/s/{account}", "e_code": 200, "e_string": "profile-header",
+     "m_string": "Page not found", "m_code": 404, "known": ["x"], "cat": "social", "strip_bad_char": "_"}
+  ]
+}
