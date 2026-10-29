@@ -2,7 +2,7 @@
 
 Estimates the position, or the possible area, of an unknown target from known WGS84 points with measured **distances (radii)** and/or **bearings**. The result is shown on an OpenStreetMap map with an error ellipse and residuals.
 
-**Status:** beta · **Version:** 0.1.0 · **Open:** [`index.html`](index.html)
+**Status:** beta · **Version:** 0.1.1 · **Open:** [`index.html`](index.html)
 
 ## Quick start
 
@@ -94,7 +94,8 @@ A `FeatureCollection` of `Point` (or `MultiPoint`) features. Point attributes ar
 
 - The result can only be as good as the inputs. Wrong radii, bearings or σ values give wrong positions, and a small error ellipse does not prove correctness.
 - Spherical earth model. Accurate to the millimetre level for distances up to a few hundred kilometres; less suitable for continental distances. Not for use across the poles or the ±180° meridian.
-- Map tiles and libraries need an internet connection. When opened from `file://`, some tile servers may refuse requests (“Referer required”). Switch the base map with the layer button (top right) or host the file on a web server.
+- Map tiles and libraries need an internet connection.
+- The standard OpenStreetMap tile server blocks pages opened via `file://` (“Access blocked”, because no HTTP Referer is sent). The tool therefore starts with the **CARTO Voyager** base map (OpenStreetMap data) when opened as a local file. When hosted on a web server it uses the standard OSM tiles. The base map can be switched with the layer button (top right). The choice is remembered separately for local and hosted use.
 - Two radii, or one radius plus one bearing from different points, are inherently ambiguous: two positions are reported.
 
 ## Self-test
@@ -124,9 +125,14 @@ All data stays in your browser (localStorage). The only network requests are the
 | [Leaflet](https://leafletjs.com/) | 1.9.4 (pinned) | BSD-2-Clause | `https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/` |
 | [Turf.js](https://turfjs.org/) | 7.1.0 (pinned) | MIT | `https://unpkg.com/@turf/turf@7.1.0/turf.min.js` |
 | Map data | – | [ODbL](https://opendatacommons.org/licenses/odbl/) | © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors |
-| Map tiles | – | – | OpenStreetMap standard tiles (default); optional: OSM Humanitarian (OSM France), CARTO |
+| Map tiles | – | – | OpenStreetMap standard tiles (default when hosted), CARTO Voyager (default via `file://`, © CARTO); optional: OSM Humanitarian (OSM France), CARTO Dark Matter |
 
 ## Changelog
+
+### v0.1.1 – 2026-10-29
+
+- Fix: when opened via `file://`, the map now defaults to CARTO Voyager (OpenStreetMap data), because the OSM tile server blocks requests without a Referer (“Access blocked”). Standard OSM tiles remain the default on web hosting.
+- Fix: the “No points yet” message in the empty table was cut off.
 
 ### v0.1.0 – 2026-10-29
 

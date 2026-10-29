@@ -117,7 +117,8 @@ tr:last-child td { border-bottom: 0; }
 #pointsTable input.invalid { border-color: var(--err); background: var(--err-bg); }
 #pointsTable tr.hl td { background: var(--info-bg); }
 #pointsTable tr.hidden-row input[type="text"] { opacity: .5; }
-#pointsTable tr.empty td { color: var(--muted); padding: 12px; text-align: center; }
+#pointsTable tr.empty td { color: var(--muted); padding: 12px; }
+#pointsTable .empty-msg { max-width: 400px; white-space: normal; }
 .icon-btn { padding: 2px 7px; line-height: 1.2; }
 
 /* Results */
@@ -296,7 +297,7 @@ details.help code { background: var(--panel-2); padding: 0 4px; border-radius: 4
       <ul>
         <li>Calculations run on a spherical earth (R = 6371 km) in a local azimuthal equidistant projection. Accuracy is excellent up to several hundred kilometres; don’t use it across the poles or the ±180° meridian.</li>
         <li>Everything runs locally in your browser; inputs are stored only in this browser’s localStorage. Nothing is uploaded except map tile requests.</li>
-        <li>If the map shows “Access blocked / Referer required”, the OpenStreetMap tile server is refusing requests from a local file. Choose another base map with the layer button (top right of the map), or put the file on a web server.</li>
+        <li>The standard OpenStreetMap tile server blocks pages opened as a local file (“Access blocked”). When opened via <code>file://</code> the tool therefore starts with the CARTO Voyager base map (also OpenStreetMap data). Standard OSM tiles are used automatically when the file is hosted on a web server. You can switch base maps with the layer button (top right of the map).</li>
       </ul>
     </details>
   </section>
@@ -322,6 +323,12 @@ const ALT_TILE_LAYERS = [
   { name: 'CARTO Dark Matter', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', subdomains: 'abcd', maxZoom: 20, filterable: false,
     attribution: TILE_ATTRIBUTION + ' &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>' },
 ];
+
+// The OSM tile servers block requests without an HTTP Referer, which is what a
+// page opened via file:// sends. In that case this OSM-based layer is used by default.
+const IS_LOCAL_FILE = location.protocol === 'file:';
+const FILE_DEFAULT_TILE_LAYER = 'CARTO Voyager';
+const OSM_LAYER_NAME = IS_LOCAL_FILE ? 'OpenStreetMap (web hosting only)' : 'OpenStreetMap';
 
 const CONFIG = {
   STORAGE_KEY: 'geoTriangulator.v1',
@@ -1165,7 +1172,7 @@ const State = {
   mode: 'auto',
   clickAdd: true,
   theme: 'auto',
-  baseLayer: 'OpenStreetMap',
+  baseLayers: {},  // explicit base map choice per context: {file: name, web: name}
   nextId: 1,
   lastResult: null,
   lastSelection: null,
@@ -1184,7 +1191,7 @@ const State = {
   save() {
     try {
       localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify({
-        v: 1, points: this.points, mode: this.mode, clickAdd: this.clickAdd, theme: this.theme, baseLayer: this.baseLayer, nextId: this.nextId,
+        v: 1, points: this.points, mode: this.mode, clickAdd: this.clickAdd, theme: this.theme, baseLayers: this.baseLayers, nextId: this.nextId,
       }));
     } catch (e) { /* storage unavailable (private mode, file:// restrictions) – ignore */ }
   },
@@ -1203,7 +1210,7 @@ const State = {
       if (MODE_LABELS[s.mode]) this.mode = s.mode;
       if (typeof s.clickAdd === 'boolean') this.clickAdd = s.clickAdd;
       if (['auto', 'light', 'dark'].includes(s.theme)) this.theme = s.theme;
-      if (typeof s.baseLayer === 'string') this.baseLayer = s.baseLayer;
+      if (s.baseLayers && typeof s.baseLayers === 'object') this.baseLayers = s.baseLayers;
       return true;
     } catch (e) { return false; }
   },
@@ -1393,15 +1400,17 @@ const MapView = {
   init() {
     this.map = L.map('map', { zoomControl: true, worldCopyJump: true }).setView([CONFIG.DEFAULT_VIEW.lat, CONFIG.DEFAULT_VIEW.lon], CONFIG.DEFAULT_VIEW.zoom);
     const bases = {
-      OpenStreetMap: L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTRIBUTION, className: 'tiles-filterable' }),
+      [OSM_LAYER_NAME]: L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTRIBUTION, className: 'tiles-filterable' }),
     };
     for (const t of ALT_TILE_LAYERS) {
       bases[t.name] = L.tileLayer(t.url, { maxZoom: t.maxZoom, subdomains: t.subdomains, attribution: t.attribution, className: t.filterable ? 'tiles-filterable' : '' });
     }
-    (bases[State.baseLayer] || bases.OpenStreetMap).addTo(this.map);
+    const ctx = IS_LOCAL_FILE ? 'file' : 'web';
+    const fallback = IS_LOCAL_FILE ? FILE_DEFAULT_TILE_LAYER : OSM_LAYER_NAME;
+    (bases[State.baseLayers[ctx]] || bases[fallback] || bases[OSM_LAYER_NAME]).addTo(this.map);
     L.control.layers(bases, null, { position: 'topright' }).addTo(this.map);
     L.control.scale({ imperial: false }).addTo(this.map);
-    this.map.on('baselayerchange', (e) => { State.baseLayer = e.name; State.save(); });
+    this.map.on('baselayerchange', (e) => { State.baseLayers[ctx] = e.name; State.save(); });
     let tileErrors = 0;
     Object.values(bases).forEach((b) => b.on('tileerror', () => {
       if (++tileErrors === 6) UI.toast('Map tiles fail to load. Check the internet connection or choose another base map (layer button, top right).', 6000);
@@ -1663,7 +1672,7 @@ const UI = {
     const tbody = $('#pointsBody');
     $('#pointCount').textContent = State.points.length ? `${State.points.length} point(s)` : '';
     if (!State.points.length) {
-      tbody.innerHTML = '<tr class="empty"><td colspan="10">No points yet – click on the map, add a row, import a file or load an example.</td></tr>';
+      tbody.innerHTML = '<tr class="empty"><td colspan="10"><div class="empty-msg">No points yet – click on the map, add a row, import a file or load an example.</div></td></tr>';
       return;
     }
     const inp = (p, f, cls, ph, title) => `<input type="text" data-f="${f}" class="${cls}" value="${this.esc(p[f])}" placeholder="${ph}" aria-label="${title}" title="${title}"${f === 'name' ? '' : ' inputmode="decimal"'} autocomplete="off" spellcheck="false">`;
