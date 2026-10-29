@@ -1,0 +1,7 @@
+{
+  "FoundSite": {"errorType": "status_code", "url": "{BASE}/u/{}", "urlMain": "{BASE}/", "username_claimed": "alice_ctf"},
+  "MessageSite": {"errorType": "message", "errorMsg": "Page not found", "url": "{BASE}/missing/{}", "urlMain": "{BASE}/", "username_claimed": "x"},
+  "WafSite": {"errorType": "message", "errorMsg": "Page not found", "url": "{BASE}/waf/{}", "urlMain": "{BASE}/", "username_claimed": "x"},
+  "StrictSite": {"errorType": "status_code", "regexCheck": "^[a-z]+$", "url": "{BASE}/strict/{}", "urlMain": "{BASE}/", "username_claimed": "x"},
+  "AdultSite": {"errorType": "status_code", "url": "{BASE}/nsfw/{}", "urlMain": "{BASE}/", "username_claimed": "x", "isNSFW": true}
+}

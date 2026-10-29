@@ -1,0 +1,14 @@
+{
+  "engines": {},
+  "tags": ["social", "coding"],
+  "sites": {
+    "FoundSite": {"tags": ["social"], "checkType": "status_code", "alexaRank": 1, "urlMain": "{BASE}/",
+      "url": "{BASE}/u/{username}", "usernameClaimed": "alice_ctf", "usernameUnclaimed": "noonewouldeverusethis7"},
+    "MessageSite": {"tags": ["coding"], "checkType": "message", "absenceStrs": ["Page not found"], "presenseStrs": ["profile-header"],
+      "alexaRank": 2, "urlMain": "{BASE}/", "url": "{BASE}/missing/{username}", "usernameClaimed": "x", "usernameUnclaimed": "y"},
+    "TlsSite": {"tags": ["social"], "checkType": "status_code", "alexaRank": 3, "protection": ["tls_fingerprint"],
+      "urlMain": "{BASE}/", "url": "{BASE}/tls/{username}", "usernameClaimed": "x", "usernameUnclaimed": "y"},
+    "UaSite": {"tags": ["social"], "checkType": "status_code", "alexaRank": 4, "headers": {"User-Agent": "FakeBrowser/1.0"},
+      "urlMain": "{BASE}/", "url": "{BASE}/ua/{username}", "usernameClaimed": "x", "usernameUnclaimed": "y"}
+  }
+}
