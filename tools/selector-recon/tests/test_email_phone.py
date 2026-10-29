@@ -184,3 +184,30 @@ def test_phone_links_are_manual_only(ctx, server):
     assert links and all(f.manual and f.status is Status.UNKNOWN for f in links)
     assert any(f.url == "https://wa.me/4915123456789" for f in links)
     assert server.requests == []  # nothing fetched
+
+
+def test_holehe_runs_only_reviewed_checks(ctx, monkeypatch):
+    """Real holehe functions, with their hardcoded URLs answered by an httpx mock transport."""
+    pytest.importorskip("holehe")
+    import httpx
+
+    from .conftest import FIXTURES
+
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.host)
+        if request.url.host == "api.protonmail.ch":
+            return httpx.Response(200, text=(FIXTURES / "http" / "proton_index.txt").read_text())
+        if request.url.host == "www.duolingo.com":
+            return httpx.Response(200, json={"users": [{"username": "alice_ctf"}]})
+        return httpx.Response(404, text="not found")
+
+    real = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: real(transport=httpx.MockTransport(handler), **kw))
+    res = {f.source: f for f in Holehe().run(email("alice@proton.me"), ctx)}
+    assert res["holehe: protonmail"].status is Status.FOUND
+    assert res["holehe: duolingo"].status is Status.FOUND
+    assert res["holehe: gravatar"].status is Status.NOT_FOUND
+    assert "--browser-ua" in res["holehe: office365"].evidence  # not run with the honest UA
+    assert set(seen) == {"api.protonmail.ch", "en.gravatar.com", "www.duolingo.com"}
