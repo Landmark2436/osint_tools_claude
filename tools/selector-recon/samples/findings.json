@@ -1,0 +1,535 @@
+{
+  "tool": "selector-recon",
+  "version": "0.1.0",
+  "started": "2026-10-29T07:45:09Z",
+  "finished": "2026-10-29T07:45:09Z",
+  "interrupted": false,
+  "selectors": [
+    {
+      "value": "user@example.com",
+      "type": "email"
+    },
+    {
+      "value": "+4915123456789",
+      "type": "phone"
+    },
+    {
+      "value": "mrrobot",
+      "type": "username"
+    },
+    {
+      "value": "example.com",
+      "type": "domain"
+    },
+    {
+      "value": "192.0.2.1",
+      "type": "ip"
+    }
+  ],
+  "summary": {
+    "found": 3,
+    "not_found": 0,
+    "unknown": 6,
+    "blocked": 0,
+    "error": 0
+  },
+  "config": {
+    "out_dir": "samples",
+    "modules": null,
+    "offline": true,
+    "timeout": 10.0,
+    "rate": 1.0,
+    "pivot": 0,
+    "include_nsfw": true,
+    "obey_robots": false,
+    "browser_ua": false,
+    "dns_servers": null,
+    "no_browser": false,
+    "browser_path": null,
+    "cache_dir": null,
+    "options": {
+      "workers": 16,
+      "region": null,
+      "wmn_data": null,
+      "maigret_top": 500,
+      "max_screenshots": 30
+    },
+    "modules_resolved": [
+      "crtsh",
+      "dns",
+      "email_info",
+      "gravatar",
+      "hibp",
+      "ip_info",
+      "maigret",
+      "phone_info",
+      "phone_links",
+      "proton",
+      "rdap",
+      "sherlock",
+      "shodan",
+      "wayback",
+      "wmn"
+    ]
+  },
+  "module_runs": [
+    {
+      "selector": "user@example.com",
+      "module": "dns",
+      "state": "skipped",
+      "reason": "offline mode",
+      "findings": 0,
+      "seconds": 0.0,
+      "round": 0
+    },
+    {
+      "selector": "user@example.com",
+      "module": "email_info",
+      "state": "ran",
+      "reason": "",
+      "findings": 1,
+      "seconds": 0.01,
+      "round": 0
+    },
+    {
+      "selector": "user@example.com",
+      "module": "gravatar",
+      "state": "skipped",
+      "reason": "offline mode",
+      "findings": 0,
+      "seconds": 0.0,
+      "round": 0
+    },
+    {
+      "selector": "user@example.com",
+      "module": "hibp",
+      "state": "skipped",
+      "reason": "offline mode",
+      "findings": 0,
+      "seconds": 0.0,
+      "round": 0
+    },
+    {
+      "selector": "user@example.com",
+      "module": "proton",
+      "state": "skipped",
+      "reason": "offline mode",
+      "findings": 0,
+      "seconds": 0.0,
+      "round": 0
+    },
+    {
+      "selector": "+4915123456789",
+      "module": "phone_info",
+      "state": "ran",
+      "reason": "",
+      "findings": 1,
+      "seconds": 0.6,
+      "round": 0
+    },
+    {
+      "selector": "+4915123456789",
+      "module": "phone_links",
+      "state": "ran",
+      "reason": "",
+      "findings": 6,
+      "seconds": 0.0,
+      "round": 0
+    },
+    {
+      "selector": "mrrobot",
+      "module": "maigret",
+      "state": "skipped",
+      "reason": "offline mode",
+      "findings": 0,
+      "seconds": 0.0,
+      "round": 0
+    },
+    {
+      "selector": "mrrobot",
+      "module": "sherlock",
+      "state": "skipped",
+      "reason": "offline mode",
+      "findings": 0,
+      "seconds": 0.0,
+      "round": 0
+    },
+    {
+      "selector": "mrrobot",
+      "module": "wmn",
+      "state": "skipped",
+      "reason": "offline mode",
+      "findings": 0,
+      "seconds": 0.0,
+      "round": 0
+    },
+    {
+      "selector": "example.com",
+      "module": "crtsh",
+      "state": "skipped",
+      "reason": "offline mode",
+      "findings": 0,
+      "seconds": 0.0,
+      "round": 0
+    },
+    {
+      "selector": "example.com",
+      "module": "dns",
+      "state": "skipped",
+      "reason": "offline mode",
+      "findings": 0,
+      "seconds": 0.0,
+      "round": 0
+    },
+    {
+      "selector": "example.com",
+      "module": "rdap",
+      "state": "skipped",
+      "reason": "offline mode",
+      "findings": 0,
+      "seconds": 0.0,
+      "round": 0
+    },
+    {
+      "selector": "example.com",
+      "module": "wayback",
+      "state": "skipped",
+      "reason": "offline mode",
+      "findings": 0,
+      "seconds": 0.0,
+      "round": 0
+    },
+    {
+      "selector": "192.0.2.1",
+      "module": "dns",
+      "state": "skipped",
+      "reason": "offline mode",
+      "findings": 0,
+      "seconds": 0.0,
+      "round": 0
+    },
+    {
+      "selector": "192.0.2.1",
+      "module": "ip_info",
+      "state": "ran",
+      "reason": "",
+      "findings": 1,
+      "seconds": 0.0,
+      "round": 0
+    },
+    {
+      "selector": "192.0.2.1",
+      "module": "rdap",
+      "state": "skipped",
+      "reason": "offline mode",
+      "findings": 0,
+      "seconds": 0.0,
+      "round": 0
+    },
+    {
+      "selector": "192.0.2.1",
+      "module": "shodan",
+      "state": "skipped",
+      "reason": "offline mode",
+      "findings": 0,
+      "seconds": 0.0,
+      "round": 0
+    }
+  ],
+  "findings": [
+    {
+      "selector": "user@example.com",
+      "selector_type": "email",
+      "module": "email_info",
+      "source": "Email syntax",
+      "status": "found",
+      "url": null,
+      "evidence": "valid syntax",
+      "http_status": null,
+      "screenshot": null,
+      "confidence": "high",
+      "category": null,
+      "manual": false,
+      "data": {
+        "local": "user",
+        "domain": "example.com",
+        "valid": true,
+        "problems": [],
+        "canonical": "user@example.com",
+        "subaddress_tag": null,
+        "possible_tag": false,
+        "freemail": false,
+        "disposable": false,
+        "reserved": true
+      },
+      "pivots": [
+        {
+          "type": "username",
+          "value": "user",
+          "reason": "local part of the email address"
+        },
+        {
+          "type": "domain",
+          "value": "example.com",
+          "reason": "email domain (not a free-mail provider)"
+        }
+      ],
+      "flags": [
+        "reserved example domain (RFC 2606): not a real mailbox"
+      ],
+      "site_key": null,
+      "round": 0,
+      "timestamp": "2026-10-29T07:45:09Z"
+    },
+    {
+      "selector": "+4915123456789",
+      "selector_type": "phone",
+      "module": "phone_info",
+      "source": "phonenumbers",
+      "status": "found",
+      "url": null,
+      "evidence": "valid; mobile; +4915123456789; Germany; carrier T-Mobile (original allocation; ported numbers differ); tz Europe/Berlin",
+      "http_status": null,
+      "screenshot": null,
+      "confidence": "high",
+      "category": null,
+      "manual": false,
+      "data": {
+        "e164": "+4915123456789",
+        "international": "+49 1512 3456789",
+        "national": "01512 3456789",
+        "country_code": 49,
+        "national_number": "15123456789",
+        "region": "DE",
+        "country": "Germany",
+        "location": "Germany",
+        "carrier": "T-Mobile",
+        "type": "mobile",
+        "time_zones": [
+          "Europe/Berlin"
+        ],
+        "valid": true,
+        "possible": true,
+        "fictional": false
+      },
+      "pivots": [],
+      "flags": [],
+      "site_key": null,
+      "round": 0,
+      "timestamp": "2026-10-29T07:45:09Z"
+    },
+    {
+      "selector": "+4915123456789",
+      "selector_type": "phone",
+      "module": "phone_links",
+      "source": "Google search",
+      "status": "unknown",
+      "url": "https://www.google.com/search?q=%22%2B4915123456789%22%20OR%20%22%2B49%201512%203456789%22%20OR%20%2201512%203456789%22",
+      "evidence": "manual lookup link, not opened by selector-recon; exact-match search for common formats",
+      "http_status": null,
+      "screenshot": null,
+      "confidence": "low",
+      "category": null,
+      "manual": true,
+      "data": {},
+      "pivots": [],
+      "flags": [
+        "link only"
+      ],
+      "site_key": null,
+      "round": 0,
+      "timestamp": "2026-10-29T07:45:09Z"
+    },
+    {
+      "selector": "+4915123456789",
+      "selector_type": "phone",
+      "module": "phone_links",
+      "source": "DuckDuckGo search",
+      "status": "unknown",
+      "url": "https://duckduckgo.com/?q=%22%2B4915123456789%22%20OR%20%22%2B49%201512%203456789%22%20OR%20%2201512%203456789%22",
+      "evidence": "manual lookup link, not opened by selector-recon; exact-match search for common formats",
+      "http_status": null,
+      "screenshot": null,
+      "confidence": "low",
+      "category": null,
+      "manual": true,
+      "data": {},
+      "pivots": [],
+      "flags": [
+        "link only"
+      ],
+      "site_key": null,
+      "round": 0,
+      "timestamp": "2026-10-29T07:45:09Z"
+    },
+    {
+      "selector": "+4915123456789",
+      "selector_type": "phone",
+      "module": "phone_links",
+      "source": "Bing search",
+      "status": "unknown",
+      "url": "https://www.bing.com/search?q=%22%2B4915123456789%22%20OR%20%22%2B49%201512%203456789%22%20OR%20%2201512%203456789%22",
+      "evidence": "manual lookup link, not opened by selector-recon; exact-match search for common formats",
+      "http_status": null,
+      "screenshot": null,
+      "confidence": "low",
+      "category": null,
+      "manual": true,
+      "data": {},
+      "pivots": [],
+      "flags": [
+        "link only"
+      ],
+      "site_key": null,
+      "round": 0,
+      "timestamp": "2026-10-29T07:45:09Z"
+    },
+    {
+      "selector": "+4915123456789",
+      "selector_type": "phone",
+      "module": "phone_links",
+      "source": "WhatsApp",
+      "status": "unknown",
+      "url": "https://wa.me/4915123456789",
+      "evidence": "manual lookup link, not opened by selector-recon; opens a chat page; sending nothing notifies nobody",
+      "http_status": null,
+      "screenshot": null,
+      "confidence": "low",
+      "category": null,
+      "manual": true,
+      "data": {},
+      "pivots": [],
+      "flags": [
+        "link only"
+      ],
+      "site_key": null,
+      "round": 0,
+      "timestamp": "2026-10-29T07:45:09Z"
+    },
+    {
+      "selector": "+4915123456789",
+      "selector_type": "phone",
+      "module": "phone_links",
+      "source": "Telegram",
+      "status": "unknown",
+      "url": "https://t.me/+4915123456789",
+      "evidence": "manual lookup link, not opened by selector-recon; resolves only if the owner allows lookup by number",
+      "http_status": null,
+      "screenshot": null,
+      "confidence": "low",
+      "category": null,
+      "manual": true,
+      "data": {},
+      "pivots": [],
+      "flags": [
+        "link only"
+      ],
+      "site_key": null,
+      "round": 0,
+      "timestamp": "2026-10-29T07:45:09Z"
+    },
+    {
+      "selector": "+4915123456789",
+      "selector_type": "phone",
+      "module": "phone_links",
+      "source": "Truecaller",
+      "status": "unknown",
+      "url": "https://www.truecaller.com/search/de/15123456789",
+      "evidence": "manual lookup link, not opened by selector-recon; needs a Truecaller login; their ToS apply",
+      "http_status": null,
+      "screenshot": null,
+      "confidence": "low",
+      "category": null,
+      "manual": true,
+      "data": {},
+      "pivots": [],
+      "flags": [
+        "link only"
+      ],
+      "site_key": null,
+      "round": 0,
+      "timestamp": "2026-10-29T07:45:09Z"
+    },
+    {
+      "selector": "192.0.2.1",
+      "selector_type": "ip",
+      "module": "ip_info",
+      "source": "IP address",
+      "status": "found",
+      "url": null,
+      "evidence": "IPv4, private; PTR name 1.2.0.192.in-addr.arpa",
+      "http_status": null,
+      "screenshot": null,
+      "confidence": "high",
+      "category": null,
+      "manual": false,
+      "data": {
+        "version": 4,
+        "scope": "private",
+        "reverse_pointer": "1.2.0.192.in-addr.arpa",
+        "is_global": false
+      },
+      "pivots": [],
+      "flags": [
+        "documentation range (RFC 5737/3849): example address"
+      ],
+      "site_key": null,
+      "round": 0,
+      "timestamp": "2026-10-29T07:45:09Z"
+    }
+  ],
+  "manual_checks": [
+    {
+      "selector": "+4915123456789",
+      "module": "phone_links",
+      "source": "Google search",
+      "url": "https://www.google.com/search?q=%22%2B4915123456789%22%20OR%20%22%2B49%201512%203456789%22%20OR%20%2201512%203456789%22",
+      "reason": "manual lookup link, not opened by selector-recon; exact-match search for common formats"
+    },
+    {
+      "selector": "+4915123456789",
+      "module": "phone_links",
+      "source": "DuckDuckGo search",
+      "url": "https://duckduckgo.com/?q=%22%2B4915123456789%22%20OR%20%22%2B49%201512%203456789%22%20OR%20%2201512%203456789%22",
+      "reason": "manual lookup link, not opened by selector-recon; exact-match search for common formats"
+    },
+    {
+      "selector": "+4915123456789",
+      "module": "phone_links",
+      "source": "Bing search",
+      "url": "https://www.bing.com/search?q=%22%2B4915123456789%22%20OR%20%22%2B49%201512%203456789%22%20OR%20%2201512%203456789%22",
+      "reason": "manual lookup link, not opened by selector-recon; exact-match search for common formats"
+    },
+    {
+      "selector": "+4915123456789",
+      "module": "phone_links",
+      "source": "WhatsApp",
+      "url": "https://wa.me/4915123456789",
+      "reason": "manual lookup link, not opened by selector-recon; opens a chat page; sending nothing notifies nobody"
+    },
+    {
+      "selector": "+4915123456789",
+      "module": "phone_links",
+      "source": "Telegram",
+      "url": "https://t.me/+4915123456789",
+      "reason": "manual lookup link, not opened by selector-recon; resolves only if the owner allows lookup by number"
+    },
+    {
+      "selector": "+4915123456789",
+      "module": "phone_links",
+      "source": "Truecaller",
+      "url": "https://www.truecaller.com/search/de/15123456789",
+      "reason": "manual lookup link, not opened by selector-recon; needs a Truecaller login; their ToS apply"
+    }
+  ],
+  "pivots": [
+    {
+      "type": "username",
+      "value": "user",
+      "reason": "local part of the email address",
+      "seen_in": [
+        "email_info/Email syntax"
+      ]
+    }
+  ]
+}
