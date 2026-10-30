@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Plate Origin</title>
+<meta name="description" content="Type the first letters of a German number plate and see where it comes from: issuing city or district and federal state.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#2563eb">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Plate Origin">
+<style>
+:root {
+  --bg: #eef1f5; --panel: #ffffff; --text: #1b2430; --muted: #5d6a7a; --border: #d9dfe6;
+  --accent: #2563eb; --input-bg: #ffffff; --code-bg: #ffffff; --code-text: #111111; --eu-blue: #003399;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f141a; --panel: #171e27; --text: #e3e8ef; --muted: #98a4b3; --border: #2b3542;
+    --accent: #5b93f5; --input-bg: #0f151c; --code-bg: #f1f1ec; --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", Arial, sans-serif;
+}
+main { max-width: 560px; margin: 0 auto; padding: 16px 16px 32px; }
+h1 { font-size: 15px; margin: 4px 0 12px; color: var(--muted); font-weight: 600; letter-spacing: .3px; }
+h1 .version { font-weight: 400; }
+
+.search { position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 4px 0 10px; }
+.field { display: flex; align-items: stretch; border: 2px solid var(--border); border-radius: 12px; background: var(--input-bg); overflow: hidden; }
+.field:focus-within { border-color: var(--accent); }
+.field .eu { width: 38px; background: var(--eu-blue); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: 7px; font: 700 15px/1 Arial, sans-serif; flex-shrink: 0; }
+.field .eu svg { margin: 8px 0 auto; }
+.field input {
+  flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text);
+  font: 700 32px/1 "DIN 1451 Mittelschrift", "Arial Narrow", "Roboto Condensed", system-ui, sans-serif;
+  letter-spacing: 2px; padding: 12px 12px; text-transform: uppercase;
+}
+.field input::placeholder { color: var(--muted); opacity: .5; letter-spacing: 1px; }
+.field button { border: 0; background: transparent; color: var(--muted); font-size: 22px; padding: 0 16px; cursor: pointer; }
+.field button:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
+
+.hint { color: var(--muted); font-size: 14px; margin: 8px 2px 0; }
+.section { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); font-weight: 600; margin: 18px 2px 8px; }
+.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.item { display: flex; gap: 12px; align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; box-shadow: var(--shadow); }
+.code {
+  flex-shrink: 0; min-width: 64px; text-align: center; padding: 4px 8px; border: 2px solid #111; border-radius: 6px;
+  background: var(--code-bg); color: var(--code-text); font: 700 22px/1.1 "DIN 1451 Mittelschrift", "Arial Narrow", "Roboto Condensed", system-ui, sans-serif; letter-spacing: 1px;
+}
+.body { min-width: 0; }
+.place { font-weight: 700; }
+.place div + div { margin-top: 2px; }
+.state { color: var(--muted); font-size: 14px; }
+.note { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.item.main { border: 2px solid var(--accent); padding: 14px; }
+.item.main .code { font-size: 30px; min-width: 84px; }
+.item.main .place { font-size: 20px; line-height: 1.25; }
+.item.main .state { font-size: 16px; }
+.empty { background: var(--panel); border: 1px dashed var(--border); border-radius: 12px; padding: 16px; color: var(--muted); text-align: center; }
+
+footer { max-width: 560px; margin: 0 auto; padding: 0 16px 24px; color: var(--muted); font-size: 12px; }
+footer a { color: var(--accent); }
+#tests { margin-top: 8px; white-space: pre-wrap; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Plate Origin <span class="version" id="appVersion"></span></h1>
+  <div class="search">
+    <div class="field">
+      <div class="eu" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 22 22" id="stars"></svg>D</div>
+      <input type="text" id="q" placeholder="e.g. FDB" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false"
+             maxlength="16" enterkeyhint="search" aria-label="First letters of the number plate" autofocus>
+      <button type="button" id="clear" aria-label="Clear" hidden>✕</button>
+    </div>
+  </div>
+  <div id="results" aria-live="polite"></div>
+</main>
+<footer>
+  German codes (<i>Unterscheidungszeichen</i>), 706 entries, works offline once loaded. Umlauts can be typed as A, O, U.
+  Data: Open Data Berlin (CC BY 3.0 DE) and npm <code>kennzeichen</code> (MIT), with manual updates; entries marked “unverified” were added by hand.
+  <a href="#" id="runTests">Self-test</a>
+  <div id="tests" hidden></div>
+</footer>
+
+<script>
+'use strict';
+const APP_VERSION = '0.2.0';
+
+const STATE_NAMES = {
+  BW: 'Baden-Württemberg', BY: 'Bayern', BE: 'Berlin', BB: 'Brandenburg', HB: 'Bremen', HH: 'Hamburg',
+  HE: 'Hessen', MV: 'Mecklenburg-Vorpommern', NI: 'Niedersachsen', NW: 'Nordrhein-Westfalen',
+  RP: 'Rheinland-Pfalz', SL: 'Saarland', SN: 'Sachsen', ST: 'Sachsen-Anhalt', SH: 'Schleswig-Holstein', TH: 'Thüringen',
+};
+
+// Code → issuing district, grouped by state. "CODE?" marks entries added by hand and not verified.
+// Base: Kfz-Kennzeichen Deutschland, Open Data Berlin (CC BY 3.0 DE) via npm german-license-plate-prefixes 2.18.0,
+// completed with the code list of npm kennzeichen 0.1.6 (MIT) and manual corrections (see README).
+const CODE_DATA = {
+  BW: 'AA:Ostalbkreis|BAD:Baden-Baden|BB:Böblingen|BC:Biberach|BCH:Neckar-Odenwald-Kreis|BH:Rastatt|BK:Schwäbisch Hall|BL:Zollernalbkreis|BÜS:Konstanz|CR:Schwäbisch Hall|CW:Calw|EM:Emmendingen|ES:Esslingen|FDS:Freudenstadt|FN:Bodenseekreis|FR:Freiburg im Breisgau|GD:Ostalbkreis|GP:Göppingen|HCH:Zollernalbkreis|HD:Rhein-Neckar-Kreis|HDH:Heidenheim|HN:Heilbronn|HOR:Freudenstadt|KA:Karlsruhe|KEL:Ortenaukreis|KN:Konstanz|KÜN:Hohenlohekreis|LB:Ludwigsburg|LEO:Böblingen|LR:Ortenaukreis|LÖ:Lörrach|MA:Mannheim|MGH:Main-Tauber-Kreis|MOS:Neckar-Odenwald-Kreis|MÜL?:Breisgau-Hochschwarzwald|NEU?:Breisgau-Hochschwarzwald|NT:Esslingen|OG:Ortenaukreis|PF:Pforzheim|RA:Rastatt|RT:Reutlingen|RV:Ravensburg|RW:Rottweil|S:Stuttgart|SHA:Schwäbisch Hall|SIG:Sigmaringen|SLG?:Sigmaringen|STO?:Konstanz|SÄK?:Waldshut|TBB:Main-Tauber-Kreis|TT:Bodenseekreis|TUT:Tuttlingen|TÜ:Tübingen|UL:Ulm|VAI:Ludwigsburg|VS:Schwarzwald-Baar-Kreis|WG?:Ravensburg|WN:Rems-Murr-Kreis|WOL:Ortenaukreis|WT:Waldshut|ÖHR:Hohenlohekreis|ÜB:Bodenseekreis',
+  BY: 'A:Augsburg|AB:Aschaffenburg|AIB:Rosenheim|AIC:Aichach-Friedberg|ALZ:Aschaffenburg|AM:Amberg|AN:Ansbach|AS:Amberg-Sulzbach|AÖ:Altötting|BA:Bamberg|BGD:Berchtesgadener Land|BGL:Berchtesgadener Land|BOG:Straubing-Bogen|BRK:Bad Kissingen|BT:Bayreuth|BUL:Schwandorf|CHA:Cham|CO:Coburg|DAH:Dachau|DEG:Deggendorf|DGF:Dingolfing-Landau|DKB:Ansbach|DLG:Dillingen a.d. Donau|DON:Donau-Ries|EBE:Ebersberg|EBN:Haßberge|EBS:Kulmbach|ED:Erding|EG:Rottal-Inn|EI:Eichstätt|ER:Erlangen|ERH:Erlangen-Höchstadt|ESB:Nürnberger Land|FDB:Aichach-Friedberg|FEU:Ansbach|FFB:Fürstenfeldbruck|FO:Forchheim|FRG:Freyung-Grafenau|FS:Freising|FÜ:Fürth|FÜS:Ostallgäu|GAP:Garmisch-Partenkirchen|GEO:Schweinfurt|GRA:Freyung-Grafenau|GRI:Rottal-Inn|GUN:Weißenburg-Gunzenhausen|GZ:Günzburg|HAB:Bad Kissingen|HAS:Haßberge|HEB:Nürnberger Land|HIP:Roth|HO:Hof|HOH:Haßberge|HÖS:Erlangen-Höchstadt|ILL:Neu-Ulm|IN:Ingolstadt|KC:Kronach|KE:Kempten (Allgäu)|KEH:Kelheim|KEM:Tirschenreuth|KF:Kaufbeuren|KG:Bad Kissingen|KRU:Günzburg|KT:Kitzingen|KU:Kulmbach|KÖN:Rhön-Grabfeld|KÖZ:Cham|LA:Landshut|LAN:Dingolfing-Landau|LAU:Nürnberger Land|LF:Traunstein|LI:Lindau (Bodensee)|LIF:Lichtenfels|LL:Landsberg am Lech|M:München|MAI:Landshut|MU?:München|MUC?:München|MAK:Wunsiedel i. Fichtelgebirge|MAL:Straubing-Bogen|MB:Miesbach|MET:Rhön-Grabfeld|MIL:Miltenberg|MM:Memmingen|MN:Unterallgäu|MOD:Ostallgäu|MSP:Main-Spessart|MÜ:Mühldorf a. Inn|MÜB:Hof|N:Nürnberg|NAB:Schwandorf|NAI:Hof|ND:Neuburg-Schrobenhausen|NEA:Neustadt a.d. Aisch-Bad Windsheim|NEC:Coburg|NEN:Schwandorf|NES:Rhön-Grabfeld|NEW:Neustadt a.d. Waldnaab|NM:Neumarkt i.d. OPf.|NU:Neu-Ulm|NÖ:Donau-Ries|OA:Oberallgäu|OAL:Ostallgäu|OBB:Miltenberg|OCH:Würzburg|OVI:Schwandorf|PA:Passau|PAF:Pfaffenhofen a.d. Ilm|PAN:Rottal-Inn|PAR:Neumarkt i.d. OPf.|PEG:Nürnberger Land|R:Regensburg|REG:Regen|REH:Wunsiedel i. Fichtelgebirge|REI:Berchtesgadener Land|RH:Roth|RID:Kelheim|RO:Rosenheim|ROD:Schwandorf|ROL:Landshut|ROT:Ansbach|SAD:Schwandorf|SAN:Kulmbach|SC:Schwabach|SEF:Neustadt a.d. Aisch-Bad Windsheim|SEL:Wunsiedel i. Fichtelgebirge|SMÜ:Augsburg|SOB:Neuburg-Schrobenhausen|SOG:Weilheim-Schongau|SR:Straubing-Bogen|STA:Starnberg|STE:Lichtenfels|SUL:Amberg-Sulzbach|SW:Schweinfurt|TIR:Tirschenreuth|TS:Traunstein|TÖL:Bad Tölz-Wolfratshausen|UFF:Neustadt a.d. Aisch-Bad Windsheim|VIB:Rottal-Inn|VIT:Regen|VOH:Neustadt a.d. Waldnaab|WEN:Weiden i.d. OPf.|WER:Dillingen a.d. Donau|WM:Weilheim-Schongau|WOR:Starnberg|WOS:Freyung-Grafenau|WS:Rosenheim|WUG:Weißenburg-Gunzenhausen|WUN:Wunsiedel i. Fichtelgebirge|WÜ:Würzburg|WÜM:Cham',
+  BE: 'B:Berlin',
+  BB: 'ANG:Uckermark|BAR:Barnim|BER:Barnim|BRB:Brandenburg an der Havel|BSK:Oder-Spree|CA:Oberspreewald-Lausitz|CB:Cottbus|EE:Elbe-Elster|EH:Oder-Spree|EW:Barnim|FF:Frankfurt (Oder)|FI:Elbe-Elster|FOR:Spree-Neiße|FRW:Märkisch-Oderland|FW:Oder-Spree|GUB:Spree-Neiße|HVL:Havelland|KW:Dahme-Spreewald|KY:Ostprignitz-Ruppin|LC:Dahme-Spreewald|LDS:Dahme-Spreewald|LIB:Elbe-Elster|LN:Dahme-Spreewald|LOS:Oder-Spree|MOL:Märkisch-Oderland|NAU:Havelland|NP:Ostprignitz-Ruppin|OHV:Oberhavel|OPR:Ostprignitz-Ruppin|OSL:Oberspreewald-Lausitz|P:Potsdam|PM:Potsdam-Mittelmark|PR:Prignitz|PZ:Uckermark|RN:Havelland|SDT:Uckermark|SEE:Märkisch-Oderland|SFB:Oberspreewald-Lausitz|SPB:Spree-Neiße|SPN:Spree-Neiße|SRB:Märkisch-Oderland|TF:Teltow-Fläming|TP:Uckermark|UM:Uckermark|WK:Ostprignitz-Ruppin',
+  HB: 'HB:Bremen / Bremerhaven',
+  HH: 'HH:Hamburg',
+  HE: 'BID:Marburg-Biedenkopf|BÜD:Wetteraukreis|DA:Darmstadt-Dieburg|DI:Darmstadt-Dieburg|DIL:Lahn-Dill-Kreis|ERB:Odenwaldkreis|ESW:Werra-Meißner-Kreis|F:Frankfurt am Main|FB:Wetteraukreis|FD:Fulda|FKB:Waldeck-Frankenberg|FZ:Schwalm-Eder-Kreis|GG:Groß-Gerau|GI:Gießen|GN:Main-Kinzig-Kreis|HEF:Hersfeld-Rotenburg|HG:Hochtaunuskreis|HOG:Kassel|HP:Bergstraße|HR:Schwalm-Eder-Kreis|HU:Main-Kinzig-Kreis|KB:Waldeck-Frankenberg|KS:Kassel|LDK:Lahn-Dill-Kreis|LM:Limburg-Weilburg|MEG:Schwalm-Eder-Kreis|MKK:Main-Kinzig-Kreis|MR:Marburg-Biedenkopf|MTK:Main-Taunus-Kreis|OF:Offenbach am Main|ROF:Hersfeld-Rotenburg|RÜD:Rheingau-Taunus-Kreis|SLÜ:Main-Kinzig-Kreis|SWA:Rheingau-Taunus-Kreis|USI:Hochtaunuskreis|VB:Vogelsbergkreis|WA:Waldeck-Frankenberg|WEL:Limburg-Weilburg|WI:Wiesbaden|WIZ:Werra-Meißner-Kreis|WOH:Kassel|WZ:Lahn-Dill-Kreis|ZIG:Schwalm-Eder-Kreis',
+  MV: 'ANK:Vorpommern-Greifswald|AT:Mecklenburgische Seenplatte|BÜZ:Rostock|DBR:Rostock|DM:Mecklenburgische Seenplatte|GDB:Nordwestmecklenburg|GMN:Vorpommern-Rügen|GVM:Nordwestmecklenburg|GW:Vorpommern-Greifswald|GÜ:Rostock|HGN:Ludwigslust-Parchim|HGW:Vorpommern-Greifswald|HRO:Rostock|HST:Vorpommern-Rügen|HWI:Nordwestmecklenburg|LBZ:Ludwigslust-Parchim|LRO:Rostock|LUP:Ludwigslust-Parchim|LWL:Ludwigslust-Parchim|MC:Mecklenburgische Seenplatte|MSE:Mecklenburgische Seenplatte|MST:Mecklenburgische Seenplatte|MÜR:Mecklenburgische Seenplatte|NB:Mecklenburgische Seenplatte|NVP:Vorpommern-Rügen|NWM:Nordwestmecklenburg|NZ:Mecklenburgische Seenplatte|OVP:Vorpommern-Greifswald|PCH:Ludwigslust-Parchim|PW:Vorpommern-Greifswald|RDG:Vorpommern-Rügen|RM:Mecklenburgische Seenplatte|ROS:Rostock|RÜG:Vorpommern-Rügen|SBG:Vorpommern-Greifswald|SN:Schwerin|STB:Ludwigslust-Parchim|TET:Rostock|UEM:Vorpommern-Greifswald|UER:Vorpommern-Greifswald|VG:Vorpommern-Greifswald|VR:Vorpommern-Rügen|WIS:Nordwestmecklenburg|WLG:Vorpommern-Greifswald|WRN:Mecklenburgische Seenplatte',
+  NI: 'ALF:Hildesheim|AUR:Aurich|BRA:Wesermarsch|BRL:Goslar|BRV:Rotenburg (Wümme)|BS:Braunschweig|BSB:Osnabrück|CE:Celle|CLP:Cloppenburg|CLZ:Goslar|CUX:Cuxhaven|DAN:Lüchow-Dannenberg|DEL:Delmenhorst|DH:Diepholz|DUD:Göttingen|EIN:Northeim|EL:Emsland|EMD:Emden|FRI:Friesland|GAN:Northeim|GF:Gifhorn|GS:Goslar|GÖ:Göttingen|H:Region Hannover|HE:Helmstedt|HI:Hildesheim|HK:Heidekreis|HM:Hameln-Pyrmont|HMÜ:Göttingen|HOL:Holzminden|LER:Leer|LG:Lüneburg|MEL:Osnabrück|NI:Nienburg (Weser)|NOH:Grafschaft Bentheim|NOM:Northeim|NOR:Aurich|OHA:Göttingen|OHZ:Osterholz|OL:Oldenburg (Oldb)|OS:Osnabrück|PE:Peine|RI:Schaumburg|ROW:Rotenburg (Wümme)|SHG:Schaumburg|STD:Stade|SY:Diepholz|SZ:Salzgitter|UE:Uelzen|VEC:Vechta|VER:Verden|WF:Wolfenbüttel|WHV:Wilhelmshaven|WL:Harburg|WOB:Wolfsburg|WST:Ammerland|WTL:Osnabrück|WTM:Wittmund',
+  NW: 'AC:Städteregion Aachen|AH:Borken|BE:Warendorf|BF:Steinfurt|BI:Bielefeld|BLB:Siegen-Wittgenstein|BM:Rhein-Erft-Kreis|BN:Bonn|BO:Bochum|BOH:Borken|BOR:Borken|BOT:Bottrop|BÜR:Paderborn|CAS:Recklinghausen|COE:Coesfeld|D:Düsseldorf|DIN:Wesel|DN:Düren|DO:Dortmund|DU:Duisburg|E:Essen|EN:Ennepe-Ruhr-Kreis|ERK:Heinsberg|EU:Euskirchen|GE:Gelsenkirchen|GEL:Kleve|GK:Heinsberg|GL:Rheinisch-Bergischer Kreis|GLA:Recklinghausen|GM:Oberbergischer Kreis|GT:Gütersloh|GV:Rhein-Kreis Neuss|HA:Hagen|HAM:Hamm|HER:Herne|HF:Herford|HS:Heinsberg|HSK:Hochsauerlandkreis|HX:Höxter|JÜL:Düren|K:Köln|KK:Viersen|KLE:Kleve|KR:Krefeld|LEV:Leverkusen|LH:Unna|LIP:Lippe|LP:Soest|LÜN:Unna|ME:Mettmann|MG:Mönchengladbach|MH:Mülheim an der Ruhr|MI:Minden-Lübbecke|MK:Märkischer Kreis|MO:Wesel|MON:Städteregion Aachen|MS:Münster|NE:Rhein-Kreis Neuss|OB:Oberhausen|OE:Olpe|OP:Leverkusen|PB:Paderborn|RE:Recklinghausen|RS:Remscheid|SG:Solingen|SI:Siegen-Wittgenstein|SLE:Euskirchen|SO:Soest|ST:Steinfurt|SU:Rhein-Sieg-Kreis|TE:Steinfurt|UN:Unna|VIE:Viersen|W:Wuppertal|WAF:Warendorf|WAN:Herne|WAR:Höxter|WAT:Bochum|WES:Wesel|WIT:Ennepe-Ruhr-Kreis',
+  RP: 'AK:Altenkirchen (Westerwald)|AW:Ahrweiler|AZ:Alzey-Worms|BIN:Mainz-Bingen|BIR:Birkenfeld|BIT:Eifelkreis Bitburg-Prüm|BKS:Bernkastel-Wittlich|COC:Cochem-Zell|DAU:Vulkaneifel|DIZ:Rhein-Lahn-Kreis|DÜW:Bad Dürkheim|EMS:Rhein-Lahn-Kreis|FT:Frankenthal (Pfalz)|GER:Germersheim|GOA:Rhein-Hunsrück-Kreis|GOH:Rhein-Lahn-Kreis|KH:Bad Kreuznach|KIB:Donnersbergkreis|KL:Kaiserslautern|KO:Koblenz|KUS:Kusel|LD:Landau in der Pfalz|LU:Ludwigshafen am Rhein|MY:Mayen-Koblenz|MYK:Mayen-Koblenz|MZ:Mainz-Bingen|NR:Neuwied|NW:Neustadt an der Weinstraße|PRÜ:Eifelkreis Bitburg-Prüm|PS:Südwestpfalz|ROK:Donnersbergkreis|RP:Rhein-Pfalz-Kreis|SAB:Trier-Saarburg|SIM:Rhein-Hunsrück-Kreis|SP:Speyer|SÜW:Südliche Weinstraße|TR:Trier-Saarburg|WIL:Bernkastel-Wittlich|WO:Worms|WW:Westerwaldkreis|ZEL:Cochem-Zell|ZW:Zweibrücken',
+  SL: 'HOM:Saarpfalz-Kreis|IGB:Saarpfalz-Kreis|MZG:Merzig-Wadern|NK:Neunkirchen|OTW?:Neunkirchen|SB:Regionalverband Saarbrücken|SLS:Saarlouis|VK:Regionalverband Saarbrücken|WND:St. Wendel',
+  SN: 'AE:Vogtlandkreis|ANA:Erzgebirgskreis|ASZ:Erzgebirgskreis|AU:Erzgebirgskreis|BED:Mittelsachsen|BIW:Bautzen|BNA:Leipzig|BZ:Bautzen|C:Chemnitz|DD:Dresden|DL:Mittelsachsen|DW:Sächsische Schweiz-Osterzgebirge|DZ:Nordsachsen|EB:Nordsachsen|ERZ:Erzgebirgskreis|FG:Mittelsachsen|FLÖ:Mittelsachsen|FTL:Sächsische Schweiz-Osterzgebirge|GC:Zwickau|GHA:Leipzig|GR:Görlitz|GRH:Meißen|GRM:Leipzig|HC:Mittelsachsen|HOT:Zwickau|HY:Bautzen|KM:Bautzen|L:Leipzig|LÖB:Görlitz|MAB:Erzgebirgskreis|MEI:Meißen|MEK:Erzgebirgskreis|MTL:Leipzig|MW:Mittelsachsen|NOL:Görlitz|NY:Görlitz|OVL:Vogtlandkreis|OZ:Nordsachsen|PIR:Sächsische Schweiz-Osterzgebirge|PL:Vogtlandkreis|RC:Vogtlandkreis|RG:Meißen|RIE:Meißen|RL:Mittelsachsen|SEB:Sächsische Schweiz-Osterzgebirge|STL:Erzgebirgskreis|SZB:Erzgebirgskreis|TDO:Nordsachsen|TG:Nordsachsen|TO:Nordsachsen|V:Vogtlandkreis|WDA:Zwickau|WSW:Görlitz|WUR:Leipzig|Z:Zwickau|ZI:Görlitz|ZP:Erzgebirgskreis',
+  ST: 'ABI:Anhalt-Bitterfeld|ASL:Salzlandkreis|AZE:Anhalt-Bitterfeld|BBG:Salzlandkreis|BLK:Burgenlandkreis|BRG:Jerichower Land|BTF:Anhalt-Bitterfeld|BÖ:Börde|DE:Dessau-Roßlau|EIL:Mansfeld-Südharz|GA:Altmarkkreis Salzwedel|GHC:Wittenberg|GNT:Jerichower Land|HAL:Halle (Saale)|HBS:Harz|HDL:Börde|HET:Mansfeld-Südharz|HHM:Burgenlandkreis|HV:Stendal|HZ:Harz|JE:Wittenberg|JL:Jerichower Land|KLZ:Altmarkkreis Salzwedel|KÖT:Anhalt-Bitterfeld|MD:Magdeburg|MER:Saalekreis|ML:Mansfeld-Südharz|MQ:Saalekreis|MSH:Mansfeld-Südharz|NEB:Burgenlandkreis|NMB:Burgenlandkreis|OBG:Stendal|OC:Börde|OK:Börde|QFT:Saalekreis|QLB:Harz|RSL:Dessau-Roßlau|SAW:Altmarkkreis Salzwedel|SBK:Salzlandkreis|SDL:Stendal|SFT:Salzlandkreis|SGH:Mansfeld-Südharz|SK:Saalekreis|SLK:Salzlandkreis|WB:Wittenberg|WMS:Börde|WR:Harz|WSF:Burgenlandkreis|WZL:Börde|ZE:Anhalt-Bitterfeld|ZZ:Burgenlandkreis',
+  SH: 'ECK:Rendsburg-Eckernförde|FL:Flensburg|HEI:Dithmarschen|HL:Lübeck|IZ:Steinburg|KI:Kiel|MED:Dithmarschen|NF:Nordfriesland|NMS:Neumünster|OD:Stormarn|OH:Ostholstein|PI:Pinneberg|PLÖ:Plön|RD:Rendsburg-Eckernförde|RZ:Herzogtum Lauenburg|SE:Segeberg|SL:Schleswig-Flensburg',
+  TH: 'ABG:Altenburger Land|AP:Weimarer Land|APD:Weimarer Land|ARN:Ilm-Kreis|ART:Kyffhäuserkreis|EA:Wartburgkreis|EF:Erfurt|EIC:Eichsfeld|EIS:Saale-Holzland-Kreis|G:Gera|GRZ:Greiz|GTH:Gotha|HBN:Hildburghausen|HIG:Eichsfeld|IK:Ilm-Kreis|IL:Ilm-Kreis|J:Jena|KYF:Kyffhäuserkreis|LBS:Saale-Orla-Kreis|LSZ:Unstrut-Hainich-Kreis|MGN:Schmalkalden-Meiningen|MHL:Unstrut-Hainich-Kreis|NDH:Nordhausen|NH:Sonneberg|PN:Saale-Orla-Kreis|RU:Saalfeld-Rudolstadt|SCZ:Saale-Orla-Kreis|SDH:Kyffhäuserkreis|SHK:Saale-Holzland-Kreis|SHL:Suhl|SLF:Saalfeld-Rudolstadt|SLN:Altenburger Land|SLZ:Wartburgkreis|SM:Schmalkalden-Meiningen|SOK:Saale-Orla-Kreis|SON:Sonneberg|SRO:Saale-Holzland-Kreis|SÖM:Sömmerda|UH:Unstrut-Hainich-Kreis|WAK:Wartburgkreis|WBS:Eichsfeld|WE:Weimar|ZR:Greiz',
+};
+
+const SHARED = {
+  A: ['Stadt Augsburg', 'Landkreis Augsburg'], AB: ['Stadt Aschaffenburg', 'Landkreis Aschaffenburg'],
+  AN: ['Stadt Ansbach', 'Landkreis Ansbach'], BA: ['Stadt Bamberg', 'Landkreis Bamberg'],
+  BT: ['Stadt Bayreuth', 'Landkreis Bayreuth'], CO: ['Stadt Coburg', 'Landkreis Coburg'],
+  'FÜ': ['Stadt Fürth', 'Landkreis Fürth'], HO: ['Stadt Hof', 'Landkreis Hof'],
+  LA: ['Stadt Landshut', 'Landkreis Landshut'], M: ['Landeshauptstadt München', 'Landkreis München'],
+  MUC: ['Landeshauptstadt München'], MU: ['Landkreis München'],
+  PA: ['Stadt Passau', 'Landkreis Passau'], R: ['Stadt Regensburg', 'Landkreis Regensburg'],
+  RO: ['Stadt Rosenheim', 'Landkreis Rosenheim'], SR: ['Stadt Straubing', 'Landkreis Straubing-Bogen'],
+  SW: ['Stadt Schweinfurt', 'Landkreis Schweinfurt'], 'WÜ': ['Stadt Würzburg', 'Landkreis Würzburg'],
+  FR: ['Stadt Freiburg im Breisgau', 'Landkreis Breisgau-Hochschwarzwald'], HD: ['Stadt Heidelberg', 'Rhein-Neckar-Kreis'],
+  HN: ['Stadt Heilbronn', 'Landkreis Heilbronn'], KA: ['Stadt Karlsruhe', 'Landkreis Karlsruhe'],
+  PF: ['Stadt Pforzheim', 'Enzkreis'], UL: ['Stadt Ulm', 'Alb-Donau-Kreis'],
+  DA: ['Stadt Darmstadt', 'Landkreis Darmstadt-Dieburg'], KS: ['Stadt Kassel', 'Landkreis Kassel'],
+  OF: ['Stadt Offenbach am Main', 'Kreis Offenbach'],
+  KL: ['Stadt Kaiserslautern', 'Landkreis Kaiserslautern'], MZ: ['Stadt Mainz', 'Landkreis Mainz-Bingen'],
+  PS: ['Stadt Pirmasens', 'Landkreis Südwestpfalz'], TR: ['Stadt Trier', 'Landkreis Trier-Saarburg'],
+  OL: ['Stadt Oldenburg', 'Landkreis Oldenburg'], OS: ['Stadt Osnabrück', 'Landkreis Osnabrück'],
+  L: ['Stadt Leipzig', 'Landkreis Leipzig'], HB: ['Stadt Bremen', 'Stadt Bremerhaven'],
+};
+
+// Codes without a regular district.
+const OTHER = {
+  SIH: 'Code in use, issuing district not known here', WIN: 'Code in use, issuing district not known here', WIV: 'Code in use, issuing district not known here',
+  BD: 'Federal authorities (Bundestag, Bundesrat, federal government)', BP: 'Federal Police (Bundespolizei)',
+  BW: 'Federal waterways and shipping administration', THW: 'Federal Agency for Technical Relief (THW)',
+  X: 'NATO headquarters in Germany', Y: 'Bundeswehr (German armed forces)',
+  BBL: 'State authorities of Brandenburg', BWL: 'State authorities of Baden-Württemberg', BYL: 'State authorities of Bayern',
+  HEL: 'State authorities of Hessen', LSA: 'State authorities of Sachsen-Anhalt', LSN: 'State authorities of Sachsen',
+  MVL: 'State authorities of Mecklenburg-Vorpommern', NL: 'State authorities of Niedersachsen',
+  NRW: 'State authorities of Nordrhein-Westfalen', RPL: 'State authorities of Rheinland-Pfalz',
+  SAL: 'State authorities of Saarland', SH: 'State authorities of Schleswig-Holstein', THL: 'State authorities of Thüringen',
+};
+
+/* ---------- Data ---------- */
+const fold = (s) => s.replace(/Ä/g, 'A').replace(/Ö/g, 'O').replace(/Ü/g, 'U');
+const ENTRIES = (() => {
+  const list = [];
+  for (const [state, packed] of Object.entries(CODE_DATA)) {
+    for (const item of packed.split('|')) {
+      const i = item.indexOf(':');
+      let code = item.slice(0, i);
+      const unverified = code.endsWith('?');
+      if (unverified) code = code.slice(0, -1);
+      list.push({ code, places: SHARED[code] || [item.slice(i + 1)], state, unverified });
+    }
+  }
+  for (const [code, text] of Object.entries(OTHER)) list.push({ code, places: [text], state: '', other: true });
+  for (const e of list) e.key = fold(e.code);
+  return list.sort((a, b) => a.code.localeCompare(b.code, 'de'));
+})();
+
+/* ---------- Lookup ---------- */
+/**
+ * Splits the input into the code part and finds matching codes.
+ * exact: the letters typed are a code; shorter: codes that are a prefix (the rest would be plate letters);
+ * longer: codes that start with the letters typed (only while still typing the code).
+ */
+function lookup(input) {
+  const s = String(input || '').toUpperCase().trim();
+  const m = s.match(/^([A-ZÄÖÜ]+)([\s\-:._·]*)(.*)$/);
+  if (!m) return { letters: '', exact: [], shorter: [], longer: [] };
+  const letters = m[1];
+  const key = fold(letters);
+  const separated = m[2].length > 0; // "M-…" or "M …": the code ends here
+  const more = m[3].length > 0; // digits typed: the code can't get longer
+  // Digits right after the letters: real plates always have 1–2 letters after the code, so the code is shorter.
+  const exact = more && !separated ? [] : ENTRIES.filter((e) => e.key === key);
+  exact.sort((a, b) => (b.code === letters) - (a.code === letters)); // MU before MÜ when MU was typed
+  // A shorter code is possible if the remaining 1–2 letters are the plate letters.
+  const shorter = separated ? [] : ENTRIES.filter((e) => e.key.length < key.length && key.length - e.key.length <= 2 && key.startsWith(e.key))
+    .sort((a, b) => b.key.length - a.key.length);
+  const longer = separated || more ? [] : ENTRIES.filter((e) => e.key.length > key.length && e.key.startsWith(key));
+  return { letters, exact, shorter, longer };
+}
+
+/* ---------- UI ---------- */
+const $ = (sel) => document.querySelector(sel);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function item(e, main) {
+  const state = e.other ? 'Special code' : STATE_NAMES[e.state];
+  return `<li class="item${main ? ' main' : ''}"><span class="code">${esc(e.code)}</span><div class="body">` +
+    `<div class="place">${e.places.map((p) => `<div>${esc(p)}</div>`).join('')}</div>` +
+    `<div class="state">${esc(state)}</div>` +
+    (e.places.length > 1 ? '<div class="note">Issued by both, city and district.</div>' : '') +
+    (e.unverified ? '<div class="note">unverified</div>' : '') + '</div></li>';
+}
+
+function render() {
+  const q = $('#q').value;
+  $('#clear').hidden = !q;
+  try { history.replaceState(null, '', q.trim() ? '#' + encodeURIComponent(q.trim()) : location.pathname + location.search); } catch (e) { /* file:// in some browsers */ }
+  const r = lookup(q);
+  let html = '';
+  if (!q.trim()) {
+    html = '<p class="hint">Type the first letters of a plate. Results appear while you type.</p>';
+  } else if (!r.letters) {
+    html = '<div class="empty">A German plate starts with letters.</div>';
+  } else if (!r.exact.length && !r.shorter.length && !r.longer.length) {
+    html = `<div class="empty">No German code matches “${esc(r.letters)}”.</div>`;
+  } else {
+    if (r.exact.length) html += `<ul class="list">${r.exact.map((e, i) => item(e, i === 0)).join('')}</ul>`;
+    if (r.shorter.length) html += `<div class="section">${r.exact.length ? 'Or, if the code is shorter' : 'Possible codes'}</div><ul class="list">${r.shorter.map((e) => item(e)).join('')}</ul>`;
+    if (r.longer.length) html += `<div class="section">Codes starting with ${esc(r.letters)}</div><ul class="list">${r.longer.map((e) => item(e)).join('')}</ul>`;
+  }
+  $('#results').innerHTML = html;
+}
+
+function runTests() {
+  const codes = (list) => list.map((e) => e.code).join(',');
+  const cases = [
+    ['exact code', () => { const r = lookup('FDB'); return r.exact[0].code === 'FDB' && r.exact[0].places[0] === 'Aichach-Friedberg' && r.exact[0].state === 'BY'; }],
+    ['while typing: completions', () => { const r = lookup('FD'); return r.exact[0].code === 'FD' && codes(r.longer).includes('FDB') && codes(r.longer).includes('FDS'); }],
+    ['whole plate without separator', () => { const r = lookup('MAB1234'); return !r.exact.length && codes(r.shorter) === 'MA,M' && codes(lookup('MAB').exact) === 'MAB'; }],
+    ['separator fixes the code', () => { const r = lookup('m-ab 1234'); return codes(r.exact) === 'M' && !r.shorter.length && !r.longer.length && r.exact[0].places.length === 2; }],
+    ['umlaut typed as plain letter', () => { const r = lookup('MU'); return codes(r.exact) === 'MU,MÜ' && r.exact[0].places[0] === 'Landkreis München'; }],
+    ['umlaut typed directly', () => codes(lookup('wü').exact) === 'WÜ'],
+    ['unknown code', () => { const r = lookup('QX'); return !r.exact.length && !r.shorter.length && !r.longer.length; }],
+    ['special code', () => lookup('THW').exact[0].other === true],
+    ['digits only / empty', () => lookup('123').letters === '' && lookup('').letters === ''],
+    ['data: 16 states, no duplicates', () => new Set(ENTRIES.filter((e) => !e.other).map((e) => e.state)).size === 16 && new Set(ENTRIES.map((e) => e.code)).size === ENTRIES.length && ENTRIES.length >= 720],
+    ['escaping', () => esc('<a href="x">') === '&lt;a href=&quot;x&quot;&gt;'],
+  ];
+  let pass = 0;
+  const lines = cases.map(([name, fn]) => { let ok = false; try { ok = !!fn(); } catch (e) { /* counts as failed */ } if (ok) pass++; return `${ok ? '✓' : '✗'} ${name}`; });
+  return { pass, total: cases.length, text: `${pass}/${cases.length} passed\n` + lines.join('\n') };
+}
+
+$('#appVersion').textContent = 'v' + APP_VERSION;
+$('#stars').innerHTML = Array.from({ length: 12 }, (_, i) => {
+  const a = (i / 12) * 2 * Math.PI;
+  return `<circle cx="${(11 + 7.5 * Math.sin(a)).toFixed(2)}" cy="${(11 - 7.5 * Math.cos(a)).toFixed(2)}" r="1.25" fill="#ffcc00"/>`;
+}).join('');
+$('#q').addEventListener('input', render);
+$('#clear').addEventListener('click', () => { $('#q').value = ''; render(); $('#q').focus(); });
+$('#runTests').addEventListener('click', (e) => { e.preventDefault(); const t = $('#tests'); t.hidden = false; t.textContent = runTests().text; });
+if (location.hash.length > 1) { try { $('#q').value = decodeURIComponent(location.hash.slice(1)); } catch (e) { /* ignore broken hash */ } }
+render();
+</script>
+</body>
+</html>
