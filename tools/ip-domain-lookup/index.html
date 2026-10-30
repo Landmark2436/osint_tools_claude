@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>IP & Domain Lookup</title>
+<meta name="description" content="Reverse DNS, domains hosted on an IP and the IP history of a domain, from free public sources without API keys.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#2563eb">
+<style>
+:root {
+  --bg: #eef1f5; --panel: #ffffff; --text: #1b2430; --muted: #5d6a7a; --border: #d9dfe6;
+  --accent: #2563eb; --input-bg: #ffffff; --tag-bg: #e8f0fe; --ok: #15803d; --warn: #b45309; --err: #b91c1c;
+  --warn-bg: #fff7e6; --row: #f6f8fb;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f141a; --panel: #171e27; --text: #e3e8ef; --muted: #98a4b3; --border: #2b3542;
+    --accent: #7aa7f7; --input-bg: #0f151c; --tag-bg: #15233d; --ok: #4ade80; --warn: #fbbf24; --err: #f87171;
+    --warn-bg: #2a2110; --row: #1b232d; --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", Arial, sans-serif;
+}
+main { max-width: 860px; margin: 0 auto; padding: 16px 16px 32px; }
+h1 { font-size: 15px; margin: 4px 0 12px; color: var(--muted); font-weight: 600; letter-spacing: .3px; }
+h1 .version { font-weight: 400; }
+a { color: var(--accent); }
+code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .92em; }
+
+form.search { display: flex; gap: 8px; }
+.field { flex: 1; min-width: 0; display: flex; border: 2px solid var(--border); border-radius: 12px; background: var(--input-bg); overflow: hidden; }
+.field:focus-within { border-color: var(--accent); }
+.field input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: 600 18px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding: 12px; }
+.field input::placeholder { color: var(--muted); opacity: .6; font-weight: 400; }
+.field button { border: 0; background: transparent; color: var(--muted); font-size: 20px; padding: 0 14px; cursor: pointer; }
+.btn { border: 0; border-radius: 12px; background: var(--accent); color: #fff; font: 600 16px/1 system-ui, sans-serif; padding: 0 18px; cursor: pointer; }
+.btn:disabled { opacity: .5; cursor: default; }
+@media (prefers-color-scheme: dark) { .btn { color: #0f141a; } }
+.small-btn { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 8px; padding: 4px 10px; font-size: 13px; cursor: pointer; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.hint { color: var(--muted); font-size: 14px; margin: 8px 2px 0; }
+details.sources { margin-top: 8px; font-size: 14px; color: var(--muted); }
+details.sources summary { cursor: pointer; }
+details.sources label { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; color: var(--text); }
+details.sources label span { color: var(--muted); }
+
+.status { display: flex; flex-wrap: wrap; gap: 6px; margin: 16px 0 4px; }
+.chip { border: 1px solid var(--border); background: var(--panel); border-radius: 999px; padding: 2px 10px; font-size: 13px; color: var(--muted); }
+.chip b { color: var(--text); font-weight: 600; }
+.chip.ok::before { content: "✓ "; color: var(--ok); }
+.chip.empty::before { content: "– "; }
+.chip.error::before { content: "⚠ "; color: var(--err); }
+.chip.loading::before { content: "… "; }
+
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-top: 12px; box-shadow: var(--shadow); }
+.card h2 { font-size: 16px; margin: 0 0 8px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.card h2 .count { color: var(--muted); font-weight: 400; font-size: 14px; }
+.card h2 .tools { margin-left: auto; display: flex; gap: 6px; }
+.card p { margin: 6px 0; }
+.muted { color: var(--muted); font-size: 14px; }
+.notice { background: var(--warn-bg); border-left: 3px solid var(--warn); padding: 8px 10px; border-radius: 6px; font-size: 14px; margin: 8px 0; }
+dl.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; }
+dl.kv dt { color: var(--muted); font-size: 14px; }
+dl.kv dd { margin: 0; overflow-wrap: anywhere; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; }
+td.date { white-space: nowrap; font-variant-numeric: tabular-nums; }
+td.name { overflow-wrap: anywhere; }
+tr.current td { background: var(--row); }
+.tag { display: inline-block; background: var(--tag-bg); color: var(--accent); border-radius: 999px; padding: 0 7px; font-size: 12px; font-weight: 600; margin: 1px 2px 1px 0; white-space: nowrap; }
+.pivot { color: var(--accent); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .95em; text-decoration: none; overflow-wrap: anywhere; }
+.pivot:hover { text-decoration: underline; }
+ul.plain { list-style: none; margin: 0; padding: 0; }
+ul.plain li { padding: 2px 0; overflow-wrap: anywhere; }
+.links { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; }
+@media (max-width: 600px) {
+  table.rows thead { display: none; }
+  table.rows, table.rows tbody, table.rows tr { display: block; }
+  table.rows tr { padding: 8px 4px; border-bottom: 1px solid var(--border); }
+  table.rows td { display: inline; border: 0; padding: 0; }
+  table.rows td.type { margin-right: 6px; font-weight: 600; }
+  table.rows td.first::before { content: "\A"; white-space: pre; }
+  table.rows td.date { color: var(--muted); font-size: 13px; }
+  table.rows td.last:not(:empty)::before { content: " – "; }
+  table.rows td.src::before { content: " "; }
+}
+
+footer { max-width: 860px; margin: 0 auto; padding: 0 16px 24px; color: var(--muted); font-size: 12px; }
+#tests { margin-top: 8px; white-space: pre-wrap; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+</style>
+</head>
+<body>
+<main>
+  <h1>IP &amp; Domain Lookup <span class="version" id="appVersion"></span></h1>
+  <form class="search" id="form">
+    <div class="field">
+      <input type="text" id="q" placeholder="IP address or domain" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+             maxlength="300" enterkeyhint="search" aria-label="IP address or domain" autofocus>
+      <button type="button" id="clear" aria-label="Clear" hidden>✕</button>
+    </div>
+    <button type="submit" class="btn" id="go">Look up</button>
+  </form>
+  <p class="hint" id="inputHint">Enter an IPv4/IPv6 address or a domain. URLs and defanged input (<code>example[.]com</code>, <code>hxxps://…</code>) are cleaned up.</p>
+  <details class="sources" id="sourcesBox">
+    <summary>Pressing <b>Look up</b> sends the IP or domain to the enabled sources (<span id="sourceCount"></span>)</summary>
+    <div id="sourceList"></div>
+  </details>
+  <div id="results" aria-live="polite"></div>
+</main>
+<footer>
+  Free public sources without API keys; results are incomplete by nature. Nothing is sent until you press Look up or click an IP or domain in the results.
+  <a href="#" id="runTests">Self-test</a>
+  <div id="tests" hidden></div>
+</footer>
+
+<script>
+'use strict';
+const APP_VERSION = '0.1.0';
+const TIMEOUT_MS = 20000;
+const STORAGE_KEY = 'ip-domain-lookup.sources';
+
+const SOURCES = [
+  { id: 'dns', name: 'DNS over HTTPS', host: 'dns.google (fallback cloudflare-dns.com)', modes: ['ip', 'domain'], what: 'reverse DNS (PTR) and current DNS records' },
+  { id: 'rdap', name: 'RDAP', host: 'rdap.org → registry', modes: ['ip', 'domain'], what: 'network owner, domain registration' },
+  { id: 'ripestat', name: 'RIPEstat', host: 'stat.ripe.net', modes: ['ip'], what: 'AS number and announced prefix' },
+  { id: 'internetdb', name: 'Shodan InternetDB', host: 'internetdb.shodan.io', modes: ['ip'], what: 'hostnames, open ports' },
+  { id: 'hackertarget', name: 'HackerTarget', host: 'api.hackertarget.com', modes: ['ip'], what: 'domains on the IP (reverse IP), limited lookups per day' },
+  { id: 'mnemonic', name: 'mnemonic Passive DNS', host: 'api.mnemonic.no', modes: ['ip', 'domain'], what: 'passive DNS with first and last seen' },
+  { id: 'otx', name: 'AlienVault OTX', host: 'otx.alienvault.com', modes: ['ip', 'domain'], what: 'passive DNS with first and last seen, subdomains' },
+];
+const SOURCE_SHORT = { dns: 'DNS', rdap: 'RDAP', ripestat: 'RIPEstat', internetdb: 'Shodan', hackertarget: 'HackerTarget', mnemonic: 'mnemonic', otx: 'OTX' };
+
+// Content delivery networks and DDoS protection: many unrelated sites share their IPs.
+const CDN_PATTERN = /cloudflare|akamai|fastly|incapsula|imperva|sucuri|cdn77|stackpath|bunny|edgecast|edgio|cloudfront|ddos-guard|vercel|netlify/i;
+
+/* ---------- Input ---------- */
+const IPV4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+const DOMAIN = /^(?=.{1,253}$)(?:[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/;
+
+function refang(s) {
+  return s.replace(/^hxxp/i, 'http').replace(/\[\.\]|\(\.\)|\{\.\}|\[dot\]|\(dot\)/gi, '.').replace(/\[:\]/g, ':');
+}
+
+function normIPv6(s) {
+  if (!/^[0-9a-f:.]+$/i.test(s) || !s.includes(':')) return null;
+  try { return new URL('http://[' + s + ']').hostname.slice(1, -1); } catch (e) { return null; }
+}
+
+/** Turns free-form input (IP, domain, URL, defanged indicator) into { kind: 'ip' | 'domain' | 'empty' | 'invalid', value, v }. */
+function parseQuery(raw) {
+  let s = refang(String(raw || '').trim());
+  if (!s) return { kind: 'empty' };
+  s = s.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').replace(/^[^@/[]*@/, '');
+  let host;
+  if (s.startsWith('[')) host = s.slice(1, s.indexOf(']') > 0 ? s.indexOf(']') : undefined);
+  else {
+    host = s.split(/[/?#\s]/)[0];
+    if ((host.match(/:/g) || []).length === 1) host = host.split(':')[0];
+  }
+  host = host.replace(/\.$/, '').toLowerCase();
+  if (IPV4.test(host)) return { kind: 'ip', value: host, v: 4 };
+  if (host.includes(':')) {
+    const v6 = normIPv6(host);
+    return v6 ? { kind: 'ip', value: v6, v: 6 } : { kind: 'invalid' };
+  }
+  if (/^[\d.]+$/.test(host)) return { kind: 'invalid' };
+  let ascii = host;
+  if (/[^\x00-\x7f]/.test(host)) {
+    try { ascii = new URL('http://' + host).hostname; } catch (e) { return { kind: 'invalid' }; }
+  }
+  return DOMAIN.test(ascii) ? { kind: 'domain', value: ascii } : { kind: 'invalid' };
+}
+
+function expandIPv6(a) {
+  const parts = a.split('::');
+  const head = parts[0] ? parts[0].split(':') : [];
+  const tail = parts.length > 1 && parts[1] ? parts[1].split(':') : [];
+  const groups = parts.length > 1 ? [...head, ...Array(8 - head.length - tail.length).fill('0'), ...tail] : head;
+  return groups.map((g) => g.padStart(4, '0')).join('');
+}
+
+function ptrName(q) {
+  if (q.v === 4) return q.value.split('.').reverse().join('.') + '.in-addr.arpa';
+  return expandIPv6(q.value).split('').reverse().join('.') + '.ip6.arpa';
+}
+
+/** Private, loopback, link-local, CGNAT, documentation and other non-public ranges. */
+function isReserved(q) {
+  if (q.v === 4) {
+    const [a, b] = q.value.split('.').map(Number);
+    return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 192 && b === 0) || (a === 198 && (b === 18 || b === 19));
+  }
+  const x = expandIPv6(q.value);
+  return /^0{31}[01]$/.test(x) || /^f[cd]/.test(x) || /^fe[89ab]/.test(x) || /^ff/.test(x) || x.startsWith('20010db8');
+}
+
+/* ---------- Helpers ---------- */
+const $ = (sel) => document.querySelector(sel);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const host = (s) => String(s || '').trim().replace(/\.$/, '').toLowerCase();
+const uniq = (arr) => [...new Set(arr)];
+
+function toDate(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const d = typeof v === 'number' ? new Date(v) : new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(v) ? v : v + 'Z');
+  return isNaN(d) ? null : d;
+}
+const fmtDate = (d) => (d ? d.toISOString().slice(0, 10) : '');
+
+class SourceError extends Error {}
+
+async function request(url, { type = 'json', headers = {}, okStatus = [] } = {}) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(url, { headers, signal: ctrl.signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
+  } catch (e) {
+    throw new SourceError(e.name === 'AbortError' ? 'timed out' : 'blocked by the browser (CORS) or unreachable');
+  } finally {
+    clearTimeout(timer);
+  }
+  if (res.status === 429) throw new SourceError('rate limit reached, try again later');
+  if (!res.ok && !okStatus.includes(res.status)) {
+    let detail = '';
+    try { const j = await res.json(); detail = (j.messages && j.messages[0] && j.messages[0].message) || j.detail || j.error || j.title || ''; } catch (e) { /* no JSON body */ }
+    throw new SourceError(`HTTP ${res.status}${detail ? ': ' + String(detail).slice(0, 120) : ''}`);
+  }
+  const body = type === 'text' ? await res.text() : await res.json().catch(() => { throw new SourceError('unexpected response'); });
+  return { status: res.status, body };
+}
+
+/* ---------- Parsers (pure, used by the self-test) ---------- */
+const DNS_TYPES = { 1: 'A', 2: 'NS', 5: 'CNAME', 6: 'SOA', 12: 'PTR', 15: 'MX', 16: 'TXT', 28: 'AAAA' };
+
+/** DNS JSON (Google / Cloudflare) → values of the requested type. */
+function parseDoH(json, type) {
+  if (!json || (json.Status !== 0 && json.Status !== 3)) throw new SourceError(`DNS error (status ${json && json.Status})`);
+  return (json.Answer || []).filter((a) => DNS_TYPES[a.type] === type).map((a) => {
+    let d = String(a.data);
+    if (type === 'TXT') return d.replace(/^"|"$/g, '').replace(/"\s+"/g, '');
+    if (type === 'MX') { const [pref, name] = d.split(/\s+/); return host(name) ? `${host(name)} (${pref})` : 'none (null MX: the domain receives no mail)'; }
+    return host(d);
+  });
+}
+
+function vcardField(entity, field) {
+  const v = entity && entity.vcardArray && entity.vcardArray[1];
+  const f = v && v.find((x) => x[0] === field);
+  return f ? (Array.isArray(f[3]) ? f[3].filter(Boolean).join(', ') : String(f[3])) : '';
+}
+
+function walkEntities(list, fn) {
+  for (const e of list || []) { fn(e); walkEntities(e.entities, fn); }
+}
+
+function rdapEvent(json, action) {
+  const e = (json.events || []).find((x) => x.eventAction === action);
+  return e ? fmtDate(toDate(e.eventDate)) : '';
+}
+
+function parseRdapIp(json) {
+  let org = '', abuse = '';
+  walkEntities(json.entities, (e) => {
+    const roles = e.roles || [];
+    if (!org && roles.includes('registrant')) org = vcardField(e, 'fn');
+    if (!abuse && roles.includes('abuse')) abuse = vcardField(e, 'email');
+  });
+  if (!org) walkEntities(json.entities, (e) => { if (!org && !(e.roles || []).includes('abuse')) org = vcardField(e, 'fn'); });
+  const cidrs = (json.cidr0_cidrs || []).map((c) => `${c.v4prefix || c.v6prefix}/${c.length}`);
+  const descr = (json.remarks || []).flatMap((r) => r.description || []).slice(0, 2).join(' ');
+  return {
+    name: json.name || '', handle: json.handle || '', country: json.country || '', org, abuse, descr,
+    range: cidrs.length ? cidrs.join(', ') : (json.startAddress ? `${json.startAddress} – ${json.endAddress}` : ''),
+    registered: rdapEvent(json, 'registration'),
+  };
+}
+
+function parseRdapDomain(json) {
+  let registrar = '';
+  walkEntities(json.entities, (e) => { if (!registrar && (e.roles || []).includes('registrar')) registrar = vcardField(e, 'fn') || e.handle || ''; });
+  return {
+    registrar, status: (json.status || []).join(', '),
+    created: rdapEvent(json, 'registration'), changed: rdapEvent(json, 'last changed'), expires: rdapEvent(json, 'expiration'),
+    nameservers: (json.nameservers || []).map((n) => host(n.ldhName)).filter(Boolean),
+  };
+}
+
+function parseRipestat(json) {
+  const d = (json && json.data) || {};
+  return {
+    prefix: d.resource && d.resource.includes('/') ? d.resource : '',
+    announced: !!d.announced,
+    asns: (d.asns || []).map((a) => ({ asn: a.asn, holder: a.holder || '' })),
+  };
+}
+
+function parseInternetDB(json, status) {
+  if (status === 404) return { hostnames: [], ports: [], tags: [] };
+  return { hostnames: (json.hostnames || []).map(host), ports: json.ports || [], tags: json.tags || [] };
+}
+
+function parseHackerTarget(text) {
+  const t = String(text || '').trim();
+  if (/api count exceeded|quota/i.test(t)) throw new SourceError('daily limit reached, try again tomorrow');
+  if (/^error/i.test(t)) throw new SourceError(t.slice(0, 120));
+  if (!t || /^no (dns|records)/i.test(t)) return { domains: [] };
+  return { domains: uniq(t.split(/\r?\n/).map((l) => host(l.split(',')[0])).filter((l) => DOMAIN.test(l))) };
+}
+
+/** Passive DNS records, normalized: { name, type, value, first, last, src }. */
+function parseMnemonic(json) {
+  if (json && json.responseCode && json.responseCode !== 200) throw new SourceError(`error ${json.responseCode}`);
+  return {
+    records: ((json && json.data) || []).map((r) => ({
+      name: host(r.query), type: String(r.rrtype || '').toUpperCase(), value: host(r.answer),
+      first: toDate(r.firstSeenTimestamp), last: toDate(r.lastSeenTimestamp), src: 'mnemonic',
+    })),
+    total: (json && json.count) || 0,
+  };
+}
+
+function parseOTX(json) {
+  return {
+    records: ((json && json.passive_dns) || []).map((r) => ({
+      name: host(r.hostname), type: String(r.record_type || '').toUpperCase(), value: host(r.address),
+      first: toDate(r.first), last: toDate(r.last), src: 'otx',
+    })),
+    total: (json && json.count) || 0,
+  };
+}
+
+/* ---------- Merging ---------- */
+function addRow(map, key, src, first, last, extra) {
+  const row = map.get(key) || Object.assign({ sources: new Set(), first: null, last: null }, extra);
+  row.sources.add(src);
+  if (first && (!row.first || first < row.first)) row.first = first;
+  if (last && (!row.last || last > row.last)) row.last = last;
+  map.set(key, row);
+}
+
+function byLastSeen(a, b) {
+  return (b.last ? b.last.getTime() : 0) - (a.last ? a.last.getTime() : 0) || a.sortKey.localeCompare(b.sortKey);
+}
+
+/** IP mode: all domains seen on the IP, from passive DNS and hostname lists. */
+function mergeIpDomains(ip, res) {
+  const map = new Map();
+  for (const id of ['mnemonic', 'otx']) {
+    for (const r of (res[id] && res[id].data && res[id].data.records) || []) {
+      if (r.value === ip && r.name && r.type !== 'PTR') addRow(map, r.name, id, r.first, r.last, { name: r.name, sortKey: r.name });
+    }
+  }
+  for (const d of (res.internetdb && res.internetdb.data && res.internetdb.data.hostnames) || []) addRow(map, d, 'internetdb', null, null, { name: d, sortKey: d });
+  for (const d of (res.hackertarget && res.hackertarget.data && res.hackertarget.data.domains) || []) addRow(map, d, 'hackertarget', null, null, { name: d, sortKey: d });
+  return [...map.values()].sort(byLastSeen);
+}
+
+const HISTORY_TYPES = ['A', 'AAAA', 'CNAME', 'NS', 'MX'];
+
+/** Domain mode: DNS history of the domain itself and the subdomains seen. */
+function mergeDomain(domain, res) {
+  const hist = new Map();
+  const subs = new Map();
+  for (const id of ['mnemonic', 'otx']) {
+    for (const r of (res[id] && res[id].data && res[id].data.records) || []) {
+      if (r.name === domain && HISTORY_TYPES.includes(r.type) && r.value) {
+        addRow(hist, r.type + ' ' + r.value, id, r.first, r.last, { type: r.type, value: r.value, sortKey: r.value });
+      } else if (r.name.endsWith('.' + domain)) {
+        addRow(subs, r.name, id, r.first, r.last, { name: r.name, sortKey: r.name });
+      }
+    }
+  }
+  const now = (res.dns && res.dns.data && res.dns.data.records) || {};
+  for (const type of HISTORY_TYPES) {
+    for (const v of now[type] || []) {
+      if (type === 'MX' && v.startsWith('none')) continue;
+      const value = type === 'MX' ? v.replace(/ \(\d+\)$/, '') : v;
+      addRow(hist, type + ' ' + value, 'dns', null, null, { type, value, sortKey: value });
+      hist.get(type + ' ' + value).current = true;
+    }
+  }
+  const order = (r) => HISTORY_TYPES.indexOf(r.type);
+  return {
+    history: [...hist.values()].sort((a, b) => order(a) - order(b) || (b.current ? 1 : 0) - (a.current ? 1 : 0) || byLastSeen(a, b)),
+    subdomains: [...subs.values()].sort(byLastSeen),
+  };
+}
+
+function csv(rows) {
+  return rows.map((r) => r.map((c) => (/[",\n;]/.test(String(c)) ? '"' + String(c).replace(/"/g, '""') + '"' : String(c))).join(',')).join('\n');
+}
+
+/* ---------- Sources ---------- */
+async function dohQuery(name, type) {
+  const enc = encodeURIComponent(name);
+  try {
+    return parseDoH((await request(`https://dns.google/resolve?name=${enc}&type=${type}`)).body, type);
+  } catch (e) {
+    if (!/CORS|timed out/.test(e.message)) throw e;
+    return parseDoH((await request(`https://cloudflare-dns.com/dns-query?name=${enc}&type=${type}`, { headers: { accept: 'application/dns-json' } })).body, type);
+  }
+}
+
+const RUNNERS = {
+  dns: async (q) => {
+    if (q.kind === 'ip') {
+      const ptr = await dohQuery(ptrName(q), 'PTR');
+      return { data: { ptr }, count: ptr.length, unit: 'PTR' };
+    }
+    const types = ['A', 'AAAA', 'CNAME', 'MX', 'NS', 'TXT'];
+    const values = await Promise.all(types.map((t) => dohQuery(q.value, t)));
+    const records = Object.fromEntries(types.map((t, i) => [t, values[i]]));
+    return { data: { records }, count: values.flat().length, unit: 'records' };
+  },
+  rdap: async (q) => {
+    const { body } = await request(`https://rdap.org/${q.kind === 'ip' ? 'ip' : 'domain'}/${encodeURIComponent(q.value)}`)
+      .catch((e) => { throw /HTTP 404/.test(e.message) ? new SourceError('no RDAP data for this ' + (q.kind === 'ip' ? 'address' : 'TLD or domain')) : e; });
+    return { data: q.kind === 'ip' ? parseRdapIp(body) : parseRdapDomain(body), count: 1, unit: 'record' };
+  },
+  ripestat: async (q) => {
+    const { body } = await request(`https://stat.ripe.net/data/prefix-overview/data.json?resource=${encodeURIComponent(q.value)}&sourceapp=osint-tools`);
+    const data = parseRipestat(body);
+    return { data, count: data.asns.length, unit: 'AS' };
+  },
+  internetdb: async (q) => {
+    const { body, status } = await request(`https://internetdb.shodan.io/${encodeURIComponent(q.value)}`, { okStatus: [404] });
+    const data = parseInternetDB(body, status);
+    return { data, count: data.hostnames.length, unit: 'hostnames' };
+  },
+  hackertarget: async (q) => {
+    const { body } = await request(`https://api.hackertarget.com/reverseiplookup/?q=${encodeURIComponent(q.value)}`, { type: 'text' });
+    const data = parseHackerTarget(body);
+    return { data, count: data.domains.length, unit: 'domains' };
+  },
+  mnemonic: async (q) => {
+    const { body } = await request(`https://api.mnemonic.no/pdns/v3/${encodeURIComponent(q.value)}?limit=1000`);
+    const data = parseMnemonic(body);
+    return { data, count: data.records.length, unit: 'records' };
+  },
+  otx: async (q) => {
+    let url;
+    if (q.kind === 'ip') url = `https://otx.alienvault.com/api/v1/indicators/IPv${q.v}/${encodeURIComponent(q.value)}/passive_dns`;
+    else url = `https://otx.alienvault.com/api/v1/indicators/domain/${encodeURIComponent(q.value)}/passive_dns`;
+    let res;
+    try { res = await request(url); } catch (e) {
+      if (q.kind !== 'domain' || !/HTTP 4/.test(e.message)) throw e;
+      // Not a registrable domain (e.g. a subdomain): ask for the exact hostname instead.
+      res = await request(`https://otx.alienvault.com/api/v1/indicators/hostname/${encodeURIComponent(q.value)}/passive_dns`);
+    }
+    const data = parseOTX(res.body);
+    return { data, count: data.records.length, unit: 'records' };
+  },
+};
+
+/* ---------- External links (opened only on click) ---------- */
+function externalLinks(q) {
+  const v = encodeURIComponent(q.value);
+  if (q.kind === 'ip') return [
+    ['Bing “ip:” search', `https://www.bing.com/search?q=ip%3A${v}`],
+    ['ViewDNS reverse IP', `https://viewdns.info/reverseip/?host=${v}&t=1`],
+    ['SecurityTrails', `https://securitytrails.com/list/ip/${v}`],
+    ['VirusTotal', `https://www.virustotal.com/gui/ip-address/${v}/relations`],
+    ['Shodan', `https://www.shodan.io/host/${v}`],
+    ['urlscan.io', `https://urlscan.io/search/#page.ip:%22${v}%22`],
+    ['Robtex', `https://www.robtex.com/ip-lookup/${v}`],
+    ['Hurricane Electric BGP', `https://bgp.he.net/ip/${v}`],
+  ];
+  return [
+    ['ViewDNS IP history', `https://viewdns.info/iphistory/?domain=${v}`],
+    ['SecurityTrails history', `https://securitytrails.com/domain/${v}/history/a`],
+    ['VirusTotal', `https://www.virustotal.com/gui/domain/${v}/relations`],
+    ['crt.sh certificates', `https://crt.sh/?q=${v}`],
+    ['urlscan.io', `https://urlscan.io/search/#domain:${v}`],
+    ['Robtex', `https://www.robtex.com/dns-lookup/${v}`],
+    ['Wayback Machine', `https://web.archive.org/web/*/${v}`],
+    ['who.is', `https://who.is/whois/${v}`],
+  ];
+}
+
+/* ---------- State ---------- */
+let enabled = loadEnabled();
+let run = null; // { id, q, sources: [ids], res: { id: { state, data, count, unit, error } } }
+let runCounter = 0;
+
+function loadEnabled() {
+  const all = Object.fromEntries(SOURCES.map((s) => [s.id, true]));
+  try { Object.assign(all, JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')); } catch (e) { /* storage blocked */ }
+  return all;
+}
+function saveEnabled() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(enabled)); } catch (e) { /* storage blocked */ }
+}
+
+function lookupNow(raw) {
+  const q = parseQuery(raw);
+  if (q.kind === 'empty') { run = null; render(); return; }
+  if (q.kind === 'invalid') { run = { q, res: {}, sources: [] }; render(); return; }
+  $('#q').value = q.value;
+  try { history.replaceState(null, '', '#' + encodeURIComponent(q.value)); } catch (e) { /* file:// in some browsers */ }
+  if (q.kind === 'ip' && isReserved(q)) { run = { q, res: {}, sources: [], reserved: true }; render(); return; }
+  const id = ++runCounter;
+  const sources = SOURCES.filter((s) => s.modes.includes(q.kind) && enabled[s.id]).map((s) => s.id);
+  run = { id, q, sources, res: Object.fromEntries(sources.map((s) => [s, { state: 'loading' }])) };
+  render();
+  for (const s of sources) {
+    RUNNERS[s](q).then((r) => ({ state: r.count ? 'ok' : 'empty', ...r }), (e) => ({ state: 'error', error: e instanceof SourceError ? e.message : 'unexpected error' }))
+      .then((r) => { if (run && run.id === id) { run.res[s] = r; render(); } });
+  }
+}
+
+/* ---------- Rendering ---------- */
+const pivot = (v) => `<a class="pivot" href="#${esc(encodeURIComponent(v))}" data-q="${esc(v)}">${esc(v)}</a>`;
+const tags = (set) => [...set].map((s) => `<span class="tag">${esc(SOURCE_SHORT[s] || s)}</span>`).join('');
+const data = (id) => run.res[id] && run.res[id].state !== 'error' && run.res[id].data;
+const LIST_LIMIT = 300;
+let exports = {};
+
+function card(title, body, opts = {}) {
+  const tools = opts.exportKey ? `<span class="tools"><button type="button" class="small-btn" data-copy="${opts.exportKey}">Copy</button><button type="button" class="small-btn" data-csv="${opts.exportKey}">CSV</button></span>` : '';
+  const count = opts.count !== undefined ? `<span class="count">${opts.count}</span>` : '';
+  return `<section class="card"><h2>${esc(title)}${count}${tools}</h2>${body}</section>`;
+}
+
+function kv(pairs) {
+  const rows = pairs.filter(([, v]) => v);
+  return rows.length ? `<dl class="kv">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl>` : '';
+}
+
+function statusChips() {
+  return `<div class="status">${run.sources.map((id) => {
+    const r = run.res[id];
+    const name = SOURCES.find((s) => s.id === id).name;
+    const text = r.state === 'loading' ? 'loading' : r.state === 'error' ? r.error : r.state === 'empty' ? 'no data' : `${r.count} ${r.unit}`;
+    return `<span class="chip ${r.state}"><b>${esc(name)}</b> ${esc(text)}</span>`;
+  }).join('')}</div>`;
+}
+
+function pending(...ids) {
+  return ids.some((id) => run.res[id] && run.res[id].state === 'loading');
+}
+
+function nameTable(rows, label, key) {
+  if (!rows.length) return '';
+  const shown = rows.slice(0, LIST_LIMIT);
+  exports[key] = { header: [label, 'first seen', 'last seen', 'sources'], rows: rows.map((r) => [r.name, fmtDate(r.first), fmtDate(r.last), [...r.sources].map((s) => SOURCE_SHORT[s]).join(' ')]) };
+  return `<div class="scroll"><table class="rows"><thead><tr><th>${esc(label)}</th><th>First seen</th><th>Last seen</th><th>Sources</th></tr></thead><tbody>` +
+    shown.map((r) => `<tr><td class="name">${pivot(r.name)}</td><td class="date first">${fmtDate(r.first)}</td><td class="date last">${fmtDate(r.last)}</td><td class="src">${tags(r.sources)}</td></tr>`).join('') +
+    `</tbody></table></div>` + (rows.length > LIST_LIMIT ? `<p class="muted">Showing ${LIST_LIMIT} of ${rows.length}. Copy or CSV export the full list.</p>` : '');
+}
+
+function renderIp() {
+  const q = run.q;
+  let html = '';
+  const dns = data('dns'), rdap = data('rdap'), ripe = data('ripestat'), idb = data('internetdb');
+
+  if (run.sources.includes('dns')) {
+    const body = dns ? (dns.ptr.length ? `<ul class="plain">${dns.ptr.map((p) => `<li>${pivot(p)}</li>`).join('')}</ul>` : '<p class="muted">No PTR record.</p>')
+      : `<p class="muted">${pending('dns') ? 'Loading…' : 'Not available.'}</p>`;
+    html += card('Reverse DNS (PTR)', body + '<p class="muted">Set by the owner of the IP range, often a generic provider name. It does not list the sites hosted on the IP.</p>');
+  }
+
+  const holder = ripe ? ripe.asns.map((a) => a.holder).join(' ') : '';
+  const isCdn = CDN_PATTERN.test(holder + ' ' + (rdap ? rdap.org + ' ' + rdap.name : '')) || (idb && idb.tags.includes('cdn'));
+  if (run.sources.includes('rdap') || run.sources.includes('ripestat') || run.sources.includes('internetdb')) {
+    let body = kv([
+      ['Network', rdap && esc([rdap.name, rdap.handle && rdap.handle !== rdap.name ? `(${rdap.handle})` : ''].filter(Boolean).join(' '))],
+      ['Owner', rdap && esc(rdap.org)],
+      ['Range', rdap && esc(rdap.range)],
+      ['Country', rdap && esc(rdap.country)],
+      ['Description', rdap && esc(rdap.descr)],
+      ['Abuse contact', rdap && esc(rdap.abuse)],
+      ['AS', ripe && ripe.asns.map((a) => `<a href="https://bgp.he.net/AS${encodeURIComponent(a.asn)}" target="_blank" rel="noopener noreferrer">AS${esc(a.asn)}</a> ${esc(a.holder)}`).join('<br>')],
+      ['Announced prefix', ripe && esc(ripe.prefix)],
+      ['Open ports', idb && esc(idb.ports.join(', '))],
+      ['Tags', idb && esc(idb.tags.join(', '))],
+    ]);
+    if (!body) body = `<p class="muted">${pending('rdap', 'ripestat', 'internetdb') ? 'Loading…' : 'Not available.'}</p>`;
+    if (isCdn) body += '<div class="notice"><b>CDN or proxy network.</b> Many unrelated sites share these IPs, and the real server behind a site is hidden. The domain list below says little about who runs a particular site.</div>';
+    html += card('Network', body);
+  }
+
+  const rows = mergeIpDomains(q.value, run.res);
+  const dsrc = ['mnemonic', 'otx', 'internetdb', 'hackertarget'].filter((s) => run.sources.includes(s));
+  if (dsrc.length) {
+    let body = nameTable(rows, 'Domain', 'domains');
+    if (!rows.length) body = `<p class="muted">${pending(...dsrc) ? 'Loading…' : 'No domains found in the enabled sources.'}</p>`;
+    else if (rows.length > 100 && !isCdn) body = '<div class="notice"><b>Many domains:</b> probably shared hosting. Sites on the same IP are not necessarily related.</div>' + body;
+    body += '<p class="muted">From passive DNS and scan data: domains that pointed to this IP at some time. Dates are empty where a source has none. Click a domain to look it up.</p>';
+    html += card('Domains seen on this IP', body, rows.length ? { count: rows.length, exportKey: 'domains' } : {});
+  }
+  return html;
+}
+
+function renderDomain() {
+  const q = run.q;
+  let html = '';
+  const dns = data('dns'), rdap = data('rdap');
+
+  if (run.sources.includes('dns')) {
+    let body;
+    if (dns) {
+      const r = dns.records;
+      const ips = (list) => list.map(pivot).join('<br>');
+      body = kv([
+        ['A', ips(r.A)], ['AAAA', ips(r.AAAA)], ['CNAME', r.CNAME.map(pivot).join('<br>')],
+        ['MX', r.MX.map(esc).join('<br>')], ['NS', r.NS.map(esc).join('<br>')],
+        ['TXT', r.TXT.map((t) => `<span class="mono">${esc(t)}</span>`).join('<br>')],
+      ]) || '<p class="muted">The domain does not resolve (no records).</p>';
+    } else body = `<p class="muted">${pending('dns') ? 'Loading…' : 'Not available.'}</p>`;
+    html += card('Current DNS', body);
+  }
+
+  if (run.sources.includes('rdap')) {
+    const body = rdap ? (kv([
+      ['Registrar', esc(rdap.registrar)], ['Registered', esc(rdap.created)], ['Last changed', esc(rdap.changed)],
+      ['Expires', esc(rdap.expires)], ['Status', esc(rdap.status)], ['Name servers', esc(rdap.nameservers.join(', '))],
+    ]) || '<p class="muted">No details.</p>') : `<p class="muted">${pending('rdap') ? 'Loading…' : 'Not available. Some registries (e.g. .de) publish little or no RDAP data.'}</p>`;
+    html += card('Registration', body);
+  }
+
+  const m = mergeDomain(q.value, run.res);
+  const psrc = ['mnemonic', 'otx'].filter((s) => run.sources.includes(s));
+  if (psrc.length || run.sources.includes('dns')) {
+    let body;
+    if (m.history.length) {
+      const shown = m.history.slice(0, LIST_LIMIT);
+      exports.history = { header: ['type', 'value', 'first seen', 'last seen', 'current', 'sources'], rows: m.history.map((r) => [r.type, r.value, fmtDate(r.first), fmtDate(r.last), r.current ? 'yes' : '', [...r.sources].map((s) => SOURCE_SHORT[s]).join(' ')]) };
+      body = `<div class="scroll"><table class="rows"><thead><tr><th>Type</th><th>Value</th><th>First seen</th><th>Last seen</th><th>Sources</th></tr></thead><tbody>` +
+        shown.map((r) => `<tr${r.current ? ' class="current"' : ''}><td class="type">${esc(r.type)}</td><td class="name">${['NS', 'MX'].includes(r.type) ? `<span class="mono">${esc(r.value)}</span>` : pivot(r.value)}${r.current ? ' <span class="tag">now</span>' : ''}</td>` +
+          `<td class="date first">${fmtDate(r.first)}</td><td class="date last">${fmtDate(r.last)}</td><td class="src">${tags(r.sources)}</td></tr>`).join('') + '</tbody></table></div>';
+    } else body = `<p class="muted">${pending(...psrc, 'dns') ? 'Loading…' : 'No history found in the enabled sources.'}</p>`;
+    body += '<p class="muted">Passive DNS: values that were observed for this exact name. “now” marks what DNS returns today. Click an IP to see what else is hosted there.</p>';
+    html += card('DNS history', body, m.history.length ? { count: m.history.length, exportKey: 'history' } : {});
+  }
+
+  if (m.subdomains.length) html += card('Subdomains seen', nameTable(m.subdomains, 'Subdomain', 'subdomains'), { count: m.subdomains.length, exportKey: 'subdomains' });
+  return html;
+}
+
+function render() {
+  $('#clear').hidden = !$('#q').value;
+  exports = {};
+  let html = '';
+  if (!run) {
+    html = '<p class="hint">Examples: an IP like <code>93.184.215.14</code> shows reverse DNS, network owner and the domains seen on it; a domain like <code>example.com</code> shows its current DNS records, registration and IP history.</p>';
+  } else if (run.q.kind === 'invalid') {
+    html = '<div class="card"><p>This is neither an IP address nor a domain.</p></div>';
+  } else if (run.reserved) {
+    html = '<div class="card"><p><b>Private or reserved address.</b> It is not used on the public internet, so public databases have no data about it. Nothing was sent.</p></div>';
+  } else {
+    if (!run.sources.length) html += '<div class="card"><p>All sources for this kind of lookup are disabled. Enable some under the search field.</p></div>';
+    html += statusChips();
+    html += run.q.kind === 'ip' ? renderIp() : renderDomain();
+    html += card('Check manually', `<div class="links">${externalLinks(run.q).map(([n, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(n)}</a>`).join('')}</div>` +
+      '<p class="muted">More data, partly with sign-in or a limit. These sites only receive the query when you click a link.</p>');
+  }
+  $('#results').innerHTML = html;
+}
+
+function renderSources() {
+  $('#sourceList').innerHTML = SOURCES.map((s) => `<label><input type="checkbox" data-source="${s.id}"${enabled[s.id] ? ' checked' : ''}>` +
+    `<div><b>${esc(s.name)}</b> <span class="mono">${esc(s.host)}</span><br><span>${esc(s.what)} · ${s.modes.length === 2 ? 'IP and domain' : 'IP only'}</span></div></label>`).join('');
+  $('#sourceCount').textContent = `${SOURCES.filter((s) => enabled[s.id]).length} of ${SOURCES.length} enabled`;
+}
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e2) { /* not supported */ }
+    ta.remove();
+    return ok;
+  }
+}
+
+function download(name, text) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/* ---------- Self-test ---------- */
+function runTests() {
+  const pq = (s) => { const r = parseQuery(s); return r.kind + ':' + (r.value || ''); };
+  const d = (s) => new Date(s + 'T00:00:00Z');
+  const res = {
+    mnemonic: { state: 'ok', data: parseMnemonic({ responseCode: 200, count: 3, data: [
+      { query: 'example.com', answer: '93.184.215.14', rrtype: 'a', firstSeenTimestamp: Date.parse('2020-01-01'), lastSeenTimestamp: Date.parse('2024-06-01') },
+      { query: 'www.example.com', answer: 'example.com', rrtype: 'cname', firstSeenTimestamp: Date.parse('2019-01-01'), lastSeenTimestamp: Date.parse('2024-01-01') },
+      { query: 'old.example.com.', answer: '10.0.0.1', rrtype: 'a', firstSeenTimestamp: Date.parse('2015-01-01'), lastSeenTimestamp: Date.parse('2016-01-01') },
+    ] }) },
+    otx: { state: 'ok', data: parseOTX({ count: 2, passive_dns: [
+      { hostname: 'example.com', address: '93.184.215.14', record_type: 'A', first: '2018-05-01T10:00:00', last: '2023-01-01T00:00:00' },
+      { hostname: 'example.com', address: '93.184.216.34', record_type: 'A', first: '2014-01-01T00:00:00', last: '2024-08-01T00:00:00' },
+    ] }) },
+    internetdb: { state: 'ok', data: parseInternetDB({ hostnames: ['Example.com', 'example.net'], ports: [80, 443], tags: [] }, 200) },
+    hackertarget: { state: 'ok', data: parseHackerTarget('example.com\nexample.org\n') },
+    dns: { state: 'ok', data: { records: { A: ['93.184.215.14'], AAAA: [], CNAME: [], MX: ['mail.example.com (10)'], NS: [], TXT: [] } } },
+  };
+  const cases = [
+    ['input: IPv4, URL, defanged', () => pq(' 93.184.215.14 ') === 'ip:93.184.215.14' && pq('https://WWW.Example.com:8443/path?x=1') === 'domain:www.example.com' &&
+      pq('hxxps://evil[.]example(.)org/x') === 'domain:evil.example.org' && pq('1.2.3.4:80') === 'ip:1.2.3.4' && pq('user@mail.example.com') === 'domain:mail.example.com'],
+    ['input: IPv6 and IDN', () => pq('2001:DB8:0:0::1') === 'ip:2001:db8::1' && pq('[2606:4700::1111]:443') === 'ip:2606:4700::1111' && pq('bücher.de') === 'domain:xn--bcher-kva.de'],
+    ['input: invalid', () => ['256.1.1.1', '1.2.3', 'localhost', 'not a domain', '-bad.com', 'a..com'].every((s) => parseQuery(s).kind === 'invalid') && parseQuery('').kind === 'empty'],
+    ['PTR names', () => ptrName(parseQuery('8.8.4.4')) === '4.4.8.8.in-addr.arpa' &&
+      ptrName(parseQuery('2001:db8::567:89ab')) === 'b.a.9.8.7.6.5.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa'],
+    ['reserved ranges', () => ['10.1.2.3', '192.168.0.1', '127.0.0.1', '172.20.0.1', '100.64.0.1', '::1', 'fe80::1', 'fd00::5'].every((s) => isReserved(parseQuery(s))) &&
+      !isReserved(parseQuery('8.8.8.8')) && !isReserved(parseQuery('172.32.0.1')) && !isReserved(parseQuery('2606:4700::1111'))],
+    ['DNS JSON', () => parseDoH({ Status: 0, Answer: [{ type: 5, data: 'x.example.net.' }, { type: 1, data: '1.2.3.4' }] }, 'A').join() === '1.2.3.4' &&
+      parseDoH({ Status: 0, Answer: [{ type: 16, data: '"v=spf1" " -all"' }] }, 'TXT')[0] === 'v=spf1 -all' &&
+      parseDoH({ Status: 0, Answer: [{ type: 15, data: '10 Mail.Example.com.' }] }, 'MX')[0] === 'mail.example.com (10)' && parseDoH({ Status: 3 }, 'PTR').length === 0 && parseDoH({ Status: 0, Answer: [{ type: 15, data: '0 .' }] }, 'MX')[0].startsWith('none')],
+    ['RDAP IP', () => { const r = parseRdapIp({ name: 'EXAMPLE-NET', handle: 'NET-1', country: 'US', startAddress: '1.1.1.0', endAddress: '1.1.1.255',
+      entities: [{ roles: ['registrant'], vcardArray: ['vcard', [['fn', {}, 'text', 'Example Inc.']]], entities: [{ roles: ['abuse'], vcardArray: ['vcard', [['email', {}, 'text', 'abuse@example.com']]] }] }] });
+      return r.org === 'Example Inc.' && r.abuse === 'abuse@example.com' && r.range === '1.1.1.0 – 1.1.1.255'; }],
+    ['RDAP domain', () => { const r = parseRdapDomain({ events: [{ eventAction: 'registration', eventDate: '1995-08-14T04:00:00Z' }], nameservers: [{ ldhName: 'A.IANA-SERVERS.NET' }],
+      entities: [{ roles: ['registrar'], vcardArray: ['vcard', [['fn', {}, 'text', 'RESERVED-IANA']]] }] });
+      return r.created === '1995-08-14' && r.registrar === 'RESERVED-IANA' && r.nameservers[0] === 'a.iana-servers.net'; }],
+    ['RIPEstat / InternetDB', () => parseRipestat({ data: { resource: '1.1.1.0/24', asns: [{ asn: 13335, holder: 'CLOUDFLARENET' }] } }).asns[0].asn === 13335 &&
+      parseInternetDB({ detail: 'No information available' }, 404).hostnames.length === 0],
+    ['HackerTarget answers', () => parseHackerTarget('a.com\nb.com\n').domains.length === 2 && parseHackerTarget('No DNS A records found for 1.2.3.4').domains.length === 0 &&
+      (() => { try { parseHackerTarget('API count exceeded - Increase Quota with Membership'); return false; } catch (e) { return /limit/.test(e.message); } })()],
+    ['merge IP mode', () => { const rows = mergeIpDomains('93.184.215.14', res); const ex = rows.find((r) => r.name === 'example.com');
+      return rows.map((r) => r.name).sort().join() === 'example.com,example.net,example.org' && ex.sources.size === 4 &&
+        +ex.first === +d('2018-05-01').setUTCHours(10) && +ex.last === +d('2024-06-01'); }],
+    ['merge domain mode', () => { const m = mergeDomain('example.com', res); const cur = m.history.find((r) => r.value === '93.184.215.14');
+      return m.history.length === 3 && cur.current && cur.sources.has('dns') && m.history[0] === cur && m.history[2].type === 'MX' &&
+        m.subdomains.map((r) => r.name).join() === 'www.example.com,old.example.com'; }],
+    ['CDN detection', () => CDN_PATTERN.test('CLOUDFLARENET - Cloudflare, Inc.') && !CDN_PATTERN.test('HETZNER-AS')],
+    ['CSV and escaping', () => csv([['a', 'b,c', 'say "hi"']]) === 'a,"b,c","say ""hi"""' && esc('<a href="x">') === '&lt;a href=&quot;x&quot;&gt;'],
+  ];
+  let pass = 0;
+  const lines = cases.map(([name, fn]) => { let ok = false; try { ok = !!fn(); } catch (e) { /* counts as failed */ } if (ok) pass++; return `${ok ? '✓' : '✗'} ${name}`; });
+  return { pass, total: cases.length, text: `${pass}/${cases.length} passed (offline, with sample data)\n` + lines.join('\n') };
+}
+
+/* ---------- Wiring ---------- */
+$('#appVersion').textContent = 'v' + APP_VERSION;
+renderSources();
+$('#form').addEventListener('submit', (e) => { e.preventDefault(); lookupNow($('#q').value); });
+$('#q').addEventListener('input', () => { $('#clear').hidden = !$('#q').value; });
+$('#clear').addEventListener('click', () => { $('#q').value = ''; run = null; render(); $('#q').focus(); try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* ignore */ } });
+$('#sourceList').addEventListener('change', (e) => {
+  const id = e.target.dataset.source;
+  if (!id) return;
+  enabled[id] = e.target.checked; saveEnabled(); renderSources();
+  $('#sourcesBox').open = true;
+});
+$('#results').addEventListener('click', async (e) => {
+  const p = e.target.closest('a[data-q]');
+  if (p) { e.preventDefault(); lookupNow(p.dataset.q); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+  const t = e.target.closest('button');
+  if (!t) return;
+  const key = t.dataset.copy || t.dataset.csv;
+  const x = exports[key];
+  if (!x) return;
+  if (t.dataset.copy) {
+    const col = x.header[0] === 'type' ? 1 : 0;
+    const ok = await copyText(uniq(x.rows.map((r) => r[col])).join('\n'));
+    t.textContent = ok ? 'Copied' : 'Failed';
+    setTimeout(() => { t.textContent = 'Copy'; }, 1500);
+  } else download(`${run.q.value}-${key}.csv`, csv([x.header, ...x.rows]));
+});
+$('#runTests').addEventListener('click', (e) => { e.preventDefault(); const t = $('#tests'); t.hidden = false; t.textContent = runTests().text; });
+if (location.hash.length > 1) { try { $('#q').value = decodeURIComponent(location.hash.slice(1)); } catch (e) { /* ignore broken hash */ } }
+render();
+</script>
+</body>
+</html>
