@@ -2,7 +2,7 @@
 
 Checks German number plates (*Kfz-Kennzeichen*): validates the format, finds the registration authority (*Zulassungsbehörde*) that issues the code, and leads you to that authority's official *Wunschkennzeichen* portal to find out whether the plate is still available. Results can be logged with a date and exported. For checking many plates, there is a batch mode.
 
-**Status:** beta · **Version:** 0.1.0 · **Open:** [`index.html`](index.html)
+**Status:** beta · **Version:** 0.1.1 · **Open:** [`index.html`](index.html)
 
 ## Is there a central database?
 
@@ -30,7 +30,7 @@ A page on GitHub Pages also can't query the portals automatically: they don't al
 | Portal links | (from the authority) | Search links for the official portal; your own saved portal link per authority |
 | Check log | portal result + note | Dated log, CSV export, JSON backup and restore |
 | Batch check | list of plates | Table with format result, authority and last logged result; CSV export |
-| Code lookup | code, district or state | Searchable table of all 704 codes |
+| Code lookup | code, district or state | Searchable table of all 706 codes |
 
 ## Input
 
@@ -75,7 +75,7 @@ Which combinations are refused beyond the nationwide ban differs between states 
 ## How it works
 
 - **Parser:** the input is upper-cased, separators removed, and split into a run of letters, the digits and an optional E/H. All splits of the letters into a known code (1–3 characters) and 0–2 letters are tried. If some readings are valid, only those are offered.
-- **Authority data:** the code table is embedded in the page (704 codes, 16 states). For 33 codes that are issued by both a city and the surrounding district (e.g. `M`, `A`, `KS`, `L`, `FR`, `HB`), both authorities are listed.
+- **Authority data:** the code table is embedded in the page (706 codes, 16 states). For 33 codes that are issued by both a city and the surrounding district (e.g. `M`, `A`, `KS`, `L`, `FR`, `HB`), both authorities are listed.
 - **Portal links:** the tool doesn't ship a list of portal URLs, because they change often and couldn't be verified for all authorities. Instead, it builds a search for “Wunschkennzeichen reservieren &lt;authority&gt; Zulassungsstelle”. Once you have found the official portal, save it with **Save portal link**; it is then linked directly.
 
 ### Data sources and corrections
@@ -83,8 +83,8 @@ Which combinations are refused beyond the nationwide ban differs between states 
 - Code → district: *Kfz-Kennzeichen Deutschland*, Senatsverwaltung für Wirtschaft, Technologie und Forschung Berlin (open data, CC BY 3.0 DE), via the npm package [`german-license-plate-prefixes`](https://github.com/derhuerst/german-license-plate-prefixes) 2.18.0 (2021).
 - Current code list: npm package [`kennzeichen`](https://github.com/canida-software/kennzeichen) 0.1.6 (MIT, 2026), used to find codes introduced after 2021 and special codes.
 - Manual corrections: `N` → City of Nuremberg; `EA` → Wartburgkreis (merger 2021); `HGW`, `NB`, `HST`, `HWI` → today's districts in Mecklenburg-Vorpommern; `IGB` → Saarpfalz-Kreis; `VK` → Regionalverband Saarbrücken; `WZ` → Lahn-Dill-Kreis; `BÜS` → Konstanz; `HB` → Bremen and Bremerhaven.
-- Added by hand, marked **unverified** in the tool: `MÜL`, `NEU` (Breisgau-Hochschwarzwald), `OTW` (Neunkirchen), `SLG` (Sigmaringen), `STO` (Konstanz), `WG` (Ravensburg), `SÄK` (Waldshut).
-- Listed in the current code list, district unknown: `SIH`, `WIN`, `WIV`, `MUC` (accepted with a warning).
+- Added by hand, marked **unverified** in the tool: `MÜL`, `NEU` (Breisgau-Hochschwarzwald), `OTW` (Neunkirchen), `SLG` (Sigmaringen), `STO` (Konstanz), `WG` (Ravensburg), `SÄK` (Waldshut), `MUC` (City of Munich), `MU` (Munich district, since January 2026).
+- Listed in the current code list, district unknown: `SIH`, `WIN`, `WIV` (accepted with a warning).
 
 ## Limitations
 
@@ -116,6 +116,10 @@ All data (input, log, saved portal links) stays in your browser's localStorage. 
 No libraries are loaded at runtime; the data is embedded in `index.html`.
 
 ## Changelog
+
+### v0.1.1 – 2026-10-30
+
+- New code `MU` (Munich district, since January 2026); `MUC` is now assigned to the City of Munich.
 
 ### v0.1.0 – 2026-10-30
 
