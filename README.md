@@ -7,6 +7,7 @@ A growing collection of small, self-contained **OSINT (open-source intelligence)
 | Tool | Description | Status / Version | Link |
 |---|---|---|---|
 | Geo Triangulator | Estimates a target's position or possible area from points with distances (radii) or leaked positions within an allowed distance (e.g. hide and seek), on an OpenStreetMap map | beta · v0.4.0 | [Open](tools/geo-triangulator/index.html) · [README](tools/geo-triangulator/README.md) |
+| License Plate Checker | Checks German number plates: validates the format, finds the issuing registration authority and leads to its official portal to check whether the plate is still available; with check log and batch mode | beta · v0.1.0 | [Open](tools/license-plate-checker/index.html) · [README](tools/license-plate-checker/README.md) |
 
 ## Usage
 
